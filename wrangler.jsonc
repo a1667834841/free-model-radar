@@ -1,0 +1,56 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "free-model-radar",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-27",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "RADAR_KV",
+      "id": "61d770461a7f4dc788d189380b0a9cf4",
+      "remote": true
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "REFRESH_QUEUE",
+        "queue": "refresh-queue"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "refresh-queue",
+        "max_batch_size": 1,
+        "max_batch_timeout": 60,
+        "max_retries": 3
+      }
+    ]
+  },
+  "triggers": {
+    "crons": [
+      "0 * * * *"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": false,
+      "persist": true,
+      "head_sampling_rate": 1
+    }
+  }
+}

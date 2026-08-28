@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "updatedAt": "2026-08-27T09:00:00.000Z",
+  "providers": [
+    {
+      "id": "provider-a",
+      "name": "Provider A",
+      "baseUrl": "https://api.example.com/v1",
+      "secretName": "PROVIDER_A_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": ["free", ":free"],
+      "probe": {
+        "maxModels": 20,
+        "concurrency": 3,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
+    }
+  ]
+}

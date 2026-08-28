@@ -1,0 +1,16 @@
+node_modules
+.next
+.next-dev
+.open-next
+.vercel
+.wrangler
+.wrangler-dry-run
+dry-run-worker
+.env
+.env.local
+.env*.local
+.dev.vars
+config/providers.local.json
+coverage
+dist
+*.tsbuildinfo
