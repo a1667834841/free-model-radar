@@ -127,6 +127,27 @@ npm run deploy
 
 验证成功后会设置 `HttpOnly` Cookie，有效期 12 小时，并重定向到 `/`。
 
+## 厂商免费规则
+
+各大模型厂商的免费额度规则各不相同，使用时请参考官方文档：
+
+| 厂商 | 免费规则简介 | 地址 |
+|------|-------------|------|
+| **DeepSeek** | 注册即赠 500 万 tokens（额度到期时间以官方为准） | [https://platform.deepseek.com/usage](https://platform.deepseek.com/usage) |
+| **OpenAI** | 免费用户可使用 GPT-4o mini 等模型，有速率限制 | [https://openai.com/pricing](https://openai.com/pricing) |
+| **Anthropic (Claude)** | 免费用户可通过 Claude.ai 聊天界面使用，API 无永久免费额度 | [https://www.anthropic.com/pricing](https://www.anthropic.com/pricing) |
+| **Google (Gemini)** | Gemini API 有免费配额（免费层每分钟 60 次请求） | [https://ai.google.dev/pricing](https://ai.google.dev/pricing) |
+| **Together AI** | 新用户赠送 $1 额度 | [https://www.together.ai/pricing](https://www.together.ai/pricing) |
+| **Groq** | 免费层有速率限制，部分模型免费使用 | [https://groq.com/pricing](https://groq.com/pricing) |
+| **Mistral AI** | 开发者免费层有速率限制，部分模型免费 | [https://mistral.ai/products/la-platform](https://mistral.ai/products/la-platform) |
+| **360 智脑** | 注册赠送一定额度，具体以官网为准 | [https://ai.360.cn](https://ai.360.cn) |
+
+> 免费规则可能随时变化，请以各厂商官网最新公告为准。
+
+## TODO
+
+- [ ] **趋势图**：增加 1 周内每个模型的吞吐量、首字延迟（TTFT）、端到端延迟的趋势图，便于观察模型性能随时间的变化。
+
 ## 注意事项
 
 当前项目使用 OpenNext Cloudflare 适配器：
