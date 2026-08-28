@@ -26,6 +26,8 @@ export type ProviderResult = {
   id: string
   name: string
   baseUrl?: string
+  /** Secret 名称（环境变量名），用于导出 Agent 配置时引用 API Key */
+  secretName?: string
   status: ProviderStatus
   models: ModelResult[]
 }

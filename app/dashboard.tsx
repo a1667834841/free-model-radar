@@ -4,7 +4,9 @@ import { useState, useMemo } from 'react'
 import { useI18n } from './i18n'
 import RefreshButton from './refresh-button'
 import ModelEvaluation from './components/evaluation/model-evaluation'
+import TrendAnalysis from './components/trends/trend-analysis'
 import type { ProviderResult, ModelResult } from '@/domain/result'
+import type { TrendResponse } from '@/domain/trend'
 import {
   DEFAULT_EVALUATION_METHOD_ID,
   getEvaluationMethod,
@@ -20,6 +22,7 @@ type DashboardProps = {
   updatedAt: string | null
   isStale: boolean
   refreshStatus: RefreshStatus
+  trends: TrendResponse
   isAdmin: boolean
   nodeGeo: { city: string | null; country: string | null; region: string | null; ip: string | null }
 }
@@ -55,9 +58,10 @@ function getProviderHomeUrl(baseUrl?: string): string | null {
   return baseUrl.replace(/\/+$/, '').replace(/\/v1$/i, '')
 }
 
-export default function Dashboard({ providers, models, updatedAt, isStale, refreshStatus, isAdmin, nodeGeo }: DashboardProps) {
+export default function Dashboard({ providers, models, updatedAt, isStale, refreshStatus, trends, isAdmin, nodeGeo }: DashboardProps) {
   const { t, locale, setLocale } = useI18n()
-  const [view, setView] = useState<'ranking' | 'provider'>('ranking')
+  const [pageView, setPageView] = useState<'overview' | 'trends'>('overview')
+  const [modelView, setModelView] = useState<'ranking' | 'provider'>('ranking')
 
   const evaluationMethod = getEvaluationMethod(DEFAULT_EVALUATION_METHOD_ID)
   const rankedModels = useMemo(() => evaluationMethod.rank(models), [models, evaluationMethod])
@@ -102,7 +106,13 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
     <div className="dashboard">
       <header className="topbar">
         <div className="topbar-brand">
-          <span className="brand-mark">FR</span>
+          <span className="brand-mark">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M6 8.6a6 6 0 0 1 12 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity=".55"/>
+              <path d="M8 9.3a4 4 0 0 1 8 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity=".28"/>
+              <text x="12" y="17" textAnchor="middle" fontSize="9" fontWeight="900" fill="currentColor" fontFamily="Inter, ui-sans-serif, system-ui, sans-serif">FM</text>
+            </svg>
+          </span>
           <span className="brand-tagline">{t('brand.tagline')}</span>
         </div>
         <div className="topbar-controls">
@@ -139,6 +149,18 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
               EN
             </button>
           </div>
+          <a
+            className="github-link"
+            href="https://github.com/a1667834841/free-model-radar"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="GitHub"
+            title="GitHub"
+          >
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+            </svg>
+          </a>
           {isAdmin ? <RefreshButton /> : null}
         </div>
       </header>
@@ -148,20 +170,6 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
           <div className="hero-eyebrow">{t('page.eyebrow')}</div>
           <h1 className="hero-title">{t('page.title')}</h1>
           <p className="hero-subtitle">{t('page.subtitle')}</p>
-        </div>
-        <div className="view-toggle">
-          <button
-            className={`view-btn ${view === 'ranking' ? 'active' : ''}`}
-            onClick={() => setView('ranking')}
-          >
-            {t('view.ranking')}
-          </button>
-          <button
-            className={`view-btn ${view === 'provider' ? 'active' : ''}`}
-            onClick={() => setView('provider')}
-          >
-            {t('view.provider')}
-          </button>
         </div>
       </section>
 
@@ -187,14 +195,33 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
         />
         <MetricCard
           label={t('metric.cycle')}
-          value="30"
-          unit="min"
+          value="1"
+          unit="hr"
           detail={t('metric.last', { time: updatedAt ? formatRelative(updatedAt, locale) : '—' })}
           accent="purple"
         />
       </section>
 
-      {providerOverview.length > 0 && (
+      <div className="page-tabs" role="tablist" aria-label={t('page.tabs')}>
+        <button
+          type="button"
+          className={`page-tab ${pageView === 'overview' ? 'active' : ''}`}
+          onClick={() => setPageView('overview')}
+          aria-pressed={pageView === 'overview'}
+        >
+          {t('page.tab.overview')}
+        </button>
+        <button
+          type="button"
+          className={`page-tab ${pageView === 'trends' ? 'active' : ''}`}
+          onClick={() => setPageView('trends')}
+          aria-pressed={pageView === 'trends'}
+        >
+          {t('page.tab.trends')}
+        </button>
+      </div>
+
+      {pageView === 'overview' && providerOverview.length > 0 && (
         <section className="overview-section">
           <div className="section-header">
             <div>
@@ -262,14 +289,37 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
         </section>
       )}
 
-      <ModelEvaluation
-        models={models}
-        providers={providers}
-        view={view}
-        providerColors={providerColors}
-        globalMinTtft={globalMinTtft}
-        globalMaxTtft={globalMaxTtft}
-      />
+      {pageView === 'overview' ? (
+        <>
+          <div className="view-toggle">
+            <button
+              type="button"
+              className={`view-btn ${modelView === 'ranking' ? 'active' : ''}`}
+              onClick={() => setModelView('ranking')}
+              aria-pressed={modelView === 'ranking'}
+            >
+              {t('view.ranking')}
+            </button>
+            <button
+              type="button"
+              className={`view-btn ${modelView === 'provider' ? 'active' : ''}`}
+              onClick={() => setModelView('provider')}
+              aria-pressed={modelView === 'provider'}
+            >
+              {t('view.provider')}
+            </button>
+          </div>
+
+          <ModelEvaluation
+            models={models}
+            providers={providers}
+            view={modelView}
+            providerColors={providerColors}
+          />
+        </>
+      ) : (
+        <TrendAnalysis trends={trends} providerColors={providerColors} />
+      )}
 
       {refreshStatus.error && (
         <div className="error-banner">{t('error.banner', { error: refreshStatus.error })}</div>
@@ -296,7 +346,7 @@ function MetricCard({ label, value, unit, detail, accent }: {
 }) {
   return (
     <article className={`metric-card ${accent}`}>
-      <div className="metric-label">{label}<span className="metric-spark">↗</span></div>
+      <div className="metric-label">{label}</div>
       <div className="metric-value">{value}{unit ? <small>{unit}</small> : null}</div>
       <div className="metric-detail">{detail}</div>
     </article>

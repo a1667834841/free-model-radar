@@ -14,7 +14,7 @@
 - 通过真实 `chat/completions` 请求验证模型是否可用；
 - 记录延迟、免费状态、Token 消耗；
 - 使用 Cloudflare Cron 定时刷新；
-- 使用 Cloudflare KV 存储配置、结果、刷新状态和模型健康状态；
+- 使用 Cloudflare KV 存储配置、结果、刷新状态、模型健康状态和近 7 天趋势采样；
 - 使用 Cloudflare Secrets 保存 API Key 和管理员 Token；
 - 不依赖服务器本地文件系统、VPS、Docker、Redis 或数据库服务器。
 
@@ -62,9 +62,11 @@ flowchart TD
     Auth --> Dashboard
 
     Dashboard --> ResultsAPI[GET /api/results]
+    Dashboard --> TrendsAPI[GET /api/trends]
     Dashboard --> RefreshAPI[POST /api/refresh]
 
     ResultsAPI --> KV[(Cloudflare KV)]
+    TrendsAPI --> KV
     RefreshAPI --> Lock[刷新锁]
     RefreshAPI --> RefreshJob[后台刷新任务]
 
@@ -82,7 +84,9 @@ flowchart TD
     Secrets --> Providers
 
     RefreshJob --> Results[生成最新结果]
+    RefreshJob --> TrendSamples[追加趋势采样]
     Results --> KV
+    TrendSamples --> KV
 ```
 
 ---
@@ -164,16 +168,13 @@ latest-results
 latest-refresh-status
 model-health-state
 refresh-lock
+refresh-job
+trend:YYYY-MM-DD
 ```
 
-未来如果需要：
+趋势数据按天分桶写入 `trend:YYYY-MM-DD`，每次完整刷新完成后追加本轮探测采样。采样保留成功与失败状态，失败、不可用或缺失时指标值为 `null`，用于计算成功率和图表断点。
 
-- 最近 24 小时延迟；
-- 最近 7 天成功率；
-- Provider 稳定性趋势；
-- 模型新增/消失历史；
-
-再迁移或扩展到 D1。
+V1 不引入 D1。最近 7 天的平均值、中位数、P95、成功率由服务端读取 KV bucket 后实时聚合；当至少存在 2 个采样日期时展示趋势图。如果后续需要更长历史、复杂查询或跨维度分析，再迁移或扩展到 D1。
 
 ### 5.2 Secrets
 
@@ -195,9 +196,9 @@ REFRESH_ADMIN_TOKEN
 Cloudflare 部署使用：
 
 ```bash
-wrangler secret put PROVIDER_A_KEY
-wrangler secret put PROVIDER_B_KEY
-wrangler secret put REFRESH_ADMIN_TOKEN
+npx wrangler secret put PROVIDER_A_KEY
+npx wrangler secret put PROVIDER_B_KEY
+npx wrangler secret put REFRESH_ADMIN_TOKEN
 ```
 
 明确约束：
@@ -213,10 +214,10 @@ wrangler secret put REFRESH_ADMIN_TOKEN
 默认 Cron：
 
 ```text
-*/30 * * * *
+0 * * * *
 ```
 
-即每 30 分钟刷新一次。
+即每小时刷新一次。
 
 Cron 频率放在 Cloudflare / Wrangler 配置中，后续改频率不需要修改业务逻辑。
 
@@ -1249,13 +1250,10 @@ V1 不做：
 - Provider 页面新增/编辑；
 - 临时 Provider；
 - 页面输入临时 API Key；
-- D1 历史趋势；
-- 7 天成功率；
+- 长期历史趋势；
 - 模型新增/消失历史图；
 - 通知；
-- 首 Token 延迟；
 - 自定义 Provider 脚本；
-- 自动估算 Token；
 - 把调用成功直接判定为免费。
 
 ---
@@ -1265,8 +1263,7 @@ V1 不做：
 可选扩展：
 
 - D1 保存历史探测记录；
-- 最近 24 小时延迟趋势；
-- 最近 7 天成功率；
+- 30 天或更长时间窗口；
 - Provider 稳定性排行；
 - 模型新增/消失事件；
 - 自动恢复隐藏模型；
@@ -1280,4 +1277,4 @@ V1 不做：
 
 ## 22. 最终一句话
 
-`Free Model Radar` 是一个运行在 Cloudflare Workers 上的公开模型雷达：Provider 配置放 KV，API Key 放 Secrets，模型由 `/v1/models` 自动发现，Probe 真实请求验证可用性，结果写入 KV，Cron 每 30 分钟刷新，管理员通过 URL Token 手动刷新，模型按延迟升序排列，连续 5 次失败的模型自动隐藏。
+`Free Model Radar` 是一个运行在 Cloudflare Workers 上的公开模型雷达：Provider 配置放 KV，API Key 放 Secrets，模型由 `/v1/models` 自动发现，Probe 真实请求验证可用性，最新结果和近 7 天趋势采样写入 KV，Cron 每小时刷新，管理员通过 URL Token 手动刷新，模型按流式性能排序，连续 5 次失败的模型自动隐藏。

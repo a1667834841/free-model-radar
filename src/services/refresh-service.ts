@@ -2,10 +2,12 @@ import type { RadarEnv } from '@/domain/env'
 import { getSecret } from '@/domain/env'
 import type { ProviderConfig } from '@/domain/provider'
 import type { ModelResult, ProviderResult, ResultsSnapshot } from '@/domain/result'
+import type { TrendSample } from '@/domain/trend'
 import { selectModelsForProbe, type DiscoveredModel } from '@/domain/model'
 import { createRefreshId, type RefreshJob, type RefreshJobProvider, type RefreshQueueMessage } from '@/domain/refresh'
 import { getProviderConfig } from '@/storage/provider-config-store'
 import { deleteRefreshJob, getRefreshJob, putLatestResults, putRefreshJob, putRefreshStatus } from '@/storage/results-store'
+import { appendTrendSamples, getTrendResponse } from '@/storage/trend-store'
 import { getModelHealthState, putModelHealthState } from '@/storage/model-health-store'
 import { acquireRefreshLock, releaseRefreshLock } from '@/storage/refresh-lock'
 import { discoverModels } from './provider-discovery'
@@ -137,7 +139,11 @@ export async function runRefresh(env: RadarEnv, refreshId: string, fetchImpl: ty
       refreshId,
       providers: job.providers.map(toProviderResult),
     }
+    const currentTrendSamples = job.providers.flatMap((provider) => provider.trendSamples ?? [])
+    const existingTrends = await getTrendResponse(env.RADAR_KV)
+    const missingTrendSamples = createMissingTrendSamples(existingTrends.modelStats, currentTrendSamples, snapshot.updatedAt)
     await putLatestResults(env.RADAR_KV, snapshot)
+    await appendTrendSamples(env.RADAR_KV, [...currentTrendSamples, ...missingTrendSamples])
     await deleteRefreshJob(env.RADAR_KV)
     await putRefreshStatus(env.RADAR_KV, {
       status: 'success',
@@ -251,10 +257,10 @@ async function createRefreshJob(
       const discoveredModels = await discoverModels(provider, apiKey, fetchImpl)
       const visibleModels = discoveredModels.filter((model) => !isModelHidden(healthState, provider.id, model.id))
       const selectedModels = selectModelsForProbe(provider, visibleModels)
-      jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, models: selectedModels, cursor: 0, successfulModels: [] })
+      jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, secretName: provider.secretName, models: selectedModels, cursor: 0, successfulModels: [], trendSamples: [] })
       log(refreshId, 'discover: ok', { provider: provider.id, discovered: discoveredModels.length, visible: visibleModels.length, selected: selectedModels.length, tookMs: Date.now() - t })
     } catch (error) {
-      jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, models: [], cursor: 0, successfulModels: [] })
+      jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, secretName: provider.secretName, models: [], cursor: 0, successfulModels: [], trendSamples: [] })
       log(refreshId, 'discover: FAILED', { provider: provider.id, error: safeErrorMessage(error), tookMs: Date.now() - t })
     }
   }
@@ -276,7 +282,11 @@ async function processNextBatch(
   fetchImpl: typeof fetch,
 ): Promise<{ job: RefreshJob; healthState: ModelHealthState }> {
   let nextHealthState = healthState
-  const nextProviders = job.providers.map((provider) => ({ ...provider, successfulModels: [...provider.successfulModels] }))
+  const nextProviders = job.providers.map((provider) => ({
+    ...provider,
+    successfulModels: [...provider.successfulModels],
+    trendSamples: [...(provider.trendSamples ?? [])],
+  }))
   let completed = job.completed
   const config = await getProviderConfig(env.RADAR_KV)
   const providerConfigById = new Map(config.providers.map((provider) => [provider.id, provider]))
@@ -314,6 +324,10 @@ async function processNextBatch(
 
       const access = getProviderAccess(jobProvider)
       if (!access) {
+        const checkedAt = new Date().toISOString()
+        for (let skippedIndex = jobProvider.cursor; skippedIndex < jobProvider.models.length; skippedIndex += 1) {
+          jobProvider.trendSamples?.push(createUnavailableTrendSample(jobProvider, jobProvider.models[skippedIndex].id, checkedAt))
+        }
         completed += jobProvider.models.length - jobProvider.cursor
         jobProvider.cursor = jobProvider.models.length
         continue
@@ -354,6 +368,16 @@ async function processNextBatch(
     completed += 1
     if (probeResult.ok) {
       nextHealthState = recordModelSuccess(nextHealthState, provider.id, probeResult.modelId, probeResult.checkedAt)
+      jobProvider.trendSamples?.push({
+        providerId: provider.id,
+        providerName: provider.name,
+        modelId: probeResult.modelId,
+        checkedAt: probeResult.checkedAt,
+        status: 'ok',
+        ttftMs: probeResult.ttftMs,
+        tokensPerSec: probeResult.tokensPerSec,
+        latencyMs: probeResult.latencyMs,
+      })
       jobProvider.successfulModels.push({
         id: probeResult.modelId,
         latencyMs: probeResult.latencyMs,
@@ -368,10 +392,53 @@ async function processNextBatch(
       })
     } else {
       nextHealthState = recordModelFailure(nextHealthState, provider.id, probeResult.modelId, probeResult.checkedAt)
+      jobProvider.trendSamples?.push({
+        providerId: provider.id,
+        providerName: provider.name,
+        modelId: probeResult.modelId,
+        checkedAt: probeResult.checkedAt,
+        status: 'failed',
+        ttftMs: null,
+        tokensPerSec: null,
+        latencyMs: null,
+      })
     }
   }
 
   return { job: { ...job, providers: nextProviders, completed }, healthState: nextHealthState }
+}
+
+function createUnavailableTrendSample(provider: RefreshJobProvider, modelId: string, checkedAt: string): TrendSample {
+  return {
+    providerId: provider.id,
+    providerName: provider.name,
+    modelId,
+    checkedAt,
+    status: 'unavailable',
+    ttftMs: null,
+    tokensPerSec: null,
+    latencyMs: null,
+  }
+}
+
+function createMissingTrendSamples(
+  historicalModels: Array<{ providerId: string; providerName: string; modelId: string }>,
+  currentSamples: TrendSample[],
+  checkedAt: string,
+): TrendSample[] {
+  const sampledKeys = new Set(currentSamples.map((sample) => `${sample.providerId}:${sample.modelId}`))
+  return historicalModels
+    .filter((model) => !sampledKeys.has(`${model.providerId}:${model.modelId}`))
+    .map((model) => ({
+      providerId: model.providerId,
+      providerName: model.providerName,
+      modelId: model.modelId,
+      checkedAt,
+      status: 'missing',
+      ttftMs: null,
+      tokensPerSec: null,
+      latencyMs: null,
+    }))
 }
 
 function toProviderResult(provider: RefreshJobProvider): ProviderResult {
@@ -383,6 +450,7 @@ function toProviderResult(provider: RefreshJobProvider): ProviderResult {
     id: provider.id,
     name: provider.name,
     baseUrl: provider.baseUrl,
+    secretName: provider.secretName,
     status: models.length > 0 ? 'healthy' : 'empty',
     models,
   }

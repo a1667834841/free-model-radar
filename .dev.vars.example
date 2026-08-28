@@ -1,2 +1,4 @@
 REFRESH_ADMIN_TOKEN=replace-with-your-admin-token
 OPENROUTER_API_KEY=replace-with-your-openrouter-key
+AIHUBMIX_API_KEY=replace-with-your-aihubmix-key
+OPENCODE_API_KEY=replace-with-your-opencode-key

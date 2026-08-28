@@ -1,0 +1,8 @@
+<svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="34" height="34" rx="10" fill="#F0A35E"/>
+  <g transform="translate(5, 5)">
+    <path d="M6 8.6a6 6 0 0 1 12 0" stroke="#0A1118" strokeWidth="1.5" strokeLinecap="round" opacity=".55"/>
+    <path d="M8 9.3a4 4 0 0 1 8 0" stroke="#0A1118" strokeWidth="1.2" strokeLinecap="round" opacity=".28"/>
+    <text x="12" y="17" textAnchor="middle" fontSize="9" fontWeight="900" fill="#0A1118" fontFamily="Inter, ui-sans-serif, system-ui, sans-serif">FM</text>
+  </g>
+</svg>

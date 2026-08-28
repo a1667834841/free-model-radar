@@ -2,6 +2,8 @@
 
 运行在 Cloudflare Workers 上的模型可用性与延迟雷达。
 
+![Free Model Radar 首页截图](docs/screenshot.png)
+
 ## 功能
 
 - Provider 配置放 Cloudflare KV；
@@ -11,7 +13,7 @@
 - 如果 Provider 没有 free 命名模型，则回退完整测试当前发现到的全部模型；
 - 通过真实 `/chat/completions` Probe 判断可用性；
 - 只要 Probe 成功且返回有效内容，就按 FREE 记录延迟、Token 使用量；
-- Cron 每 30 分钟刷新；
+- Cron 每 1消失刷新；
 - 管理员通过 `/?admin_token=...` 进入后可手动刷新；
 - 连续 5 次失败的模型 ID 自动隐藏。
 
@@ -87,8 +89,8 @@ npm run kv:pull
 ## Cloudflare Secrets
 
 ```bash
-wrangler secret put REFRESH_ADMIN_TOKEN
-wrangler secret put PROVIDER_A_KEY
+npx wrangler secret put REFRESH_ADMIN_TOKEN
+npx wrangler secret put PROVIDER_A_KEY
 ```
 
 ## KV
@@ -140,12 +142,28 @@ npm run deploy
 | **TokenRouter** | 统一 API 网关，部分模型提供 Free Tier 与限时折扣（如 Qwen3.8-Max Free Tier、Kimi K3 最高 60% off），充值赠送额度 + 开发者 $200 额度，无平台费 | [https://www.tokenrouter.com](https://www.tokenrouter.com) |
 | **TokenHarbor** | 支持免费试用与免费模型（Try free），聚合 Anthropic/OpenAI/Gemini/智谱/Kimi 等模型，付费 Pass 从 $0.99/月起 | [https://tokenharbor.ai](https://tokenharbor.ai) |
 | **RNTM (Runtime)** | 按量付费、无订阅，提供免费路由模型（`freeopenrouter`、`glm-5.2`、`minimax-m3` 等 Free route，$0/1M tokens），价格透明 | [https://rntm.sh](https://rntm.sh) |
+| **AIHubMix** | 多模型聚合平台，提供 53 个免费模型（`coding-glm-5.3-free`、`gpt-5.5-free`、`qwen3.6-plus-preview-free` 等，含 `free` 后缀命名），速率与免费额度以官方为准 | [https://aihubmix.com](https://aihubmix.com) |
+| **OpenCode ZEN** | opencode.ai 统一 API 网关，提供 7 个免费模型（`deepseek-v4-flash-free`、`hy3-free`、`laguna-s-2.1-free` 等），部分模型有速率限制 | [https://opencode.ai](https://opencode.ai) |
 
 > 免费规则可能随时变化，请以各厂商官网最新公告为准。
+```
 
 ## TODO
 
-- [ ] **趋势图**：增加 1 周内每个模型的吞吐量、首字延迟（TTFT）、端到端延迟的趋势图，便于观察模型性能随时间的变化。
+- [x] **趋势图**：增加近 7 天窗口内每个模型的吞吐量、首字延迟（TTFT）、端到端延迟趋势图；累计到 2 天数据即可展示走势，便于观察模型性能随时间的变化。
+- [x] **Agent 配置导出**：新增「Agent 配置」页，导出各大 Agent 的模型配置信息，仅支持复制（不提供下载）。可复制当前免费模型的 ID，以及对应 Agent（Claude Code、Codex、OpenCode、Gemini CLI、Zed、Cursor）配置文件的格式。配置模板见 [`docs/agent-config-formats.md`](docs/agent-config-formats.md)。
+
+## 趋势数据存储
+
+趋势数据继续使用 Cloudflare KV，不引入 D1。刷新任务完成后会按天追加原始采样：
+
+```text
+trend:YYYY-MM-DD
+```
+
+每条采样记录包含 `providerId`、`providerName`、`modelId`、`checkedAt`、`status`、`ttftMs`、`tokensPerSec`、`latencyMs`。失败、不可用或缺失记录会保留 `status`，指标值使用 `null`，用于计算成功率并在趋势图中显示断点/失败点。
+
+前端读取近 7 天 bucket 后在服务端聚合平均值、中位数、P95 和成功率；当至少存在 2 个采样日期时展示趋势图。KV 中只保存原始数据，避免派生统计写死。
 
 ## 注意事项
 

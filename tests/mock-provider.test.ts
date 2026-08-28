@@ -389,4 +389,44 @@ describe('mock provider refresh', () => {
     expect(await kv.get('refresh-job')).toBeNull()
     expect(sent).toHaveLength(0)
   })
+
+  it('keeps disappeared historical models as missing trend samples', async () => {
+    const kv = new MemoryKV()
+    await kv.put('providers-config', JSON.stringify({
+      version: 1,
+      updatedAt: '2026-08-27T09:00:00.000Z',
+      providers: [{
+        id: 'provider-a',
+        name: 'Provider A',
+        baseUrl: 'https://api.example.com/v1',
+        secretName: 'PROVIDER_A_KEY',
+        enabled: true,
+        modelStrategy: 'free-first',
+        freeKeywords: ['free'],
+        probe: { maxModels: 20, concurrency: 1, attempts: 1, timeoutMs: 10000 },
+      }],
+    }))
+
+    const env = { RADAR_KV: kv as unknown as KVNamespace, PROVIDER_A_KEY: 'key' } satisfies RadarEnv
+    let discoveredModels = [{ id: 'free-model' }]
+    const fetchImpl = async (input: RequestInfo | URL) => {
+      const url = input.toString()
+      if (url.endsWith('/models')) {
+        return new Response(JSON.stringify({ data: discoveredModels }), { status: 200 })
+      }
+      return streamingProbeResponse()
+    }
+
+    await runRefresh(env, 'refresh-with-model', fetchImpl as typeof fetch)
+    discoveredModels = []
+    await runRefresh(env, 'refresh-missing-model', fetchImpl as typeof fetch)
+
+    const trendEntry = Array.from(kv.store.entries()).find(([key]) => key.startsWith('trend:'))
+    expect(trendEntry).toBeDefined()
+    const bucket = JSON.parse(trendEntry?.[1] ?? '{"samples":[]}')
+    expect(bucket.samples).toEqual(expect.arrayContaining([
+      expect.objectContaining({ modelId: 'free-model', status: 'ok' }),
+      expect.objectContaining({ modelId: 'free-model', status: 'missing', ttftMs: null, tokensPerSec: null, latencyMs: null }),
+    ]))
+  })
 })

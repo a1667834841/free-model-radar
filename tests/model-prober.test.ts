@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { probeModel, modelProberInternals } from '@/services/model-prober'
+import { probeModel, modelProberInternals, buildProbePrompt } from '@/services/model-prober'
 import type { ProviderConfig } from '@/domain/provider'
 
 const provider: ProviderConfig = {
@@ -27,6 +27,17 @@ function sseResponse(chunks: string[]): Response {
 }
 
 describe('model prober', () => {
+  it('builds a non-cacheable prompt with a different seed each time', () => {
+    const a = buildProbePrompt()
+    const b = buildProbePrompt()
+    expect(a).toMatch(/^Reply with exactly: pong  \[seed:[0-9a-f]{16}\]$/)
+    expect(a).not.toBe(b)
+  })
+
+  it('allows an explicit seed for deterministic tests', () => {
+    expect(buildProbePrompt('abc123')).toContain('[seed:abc123]')
+  })
+
   it('accepts streaming HTTP 200 with assistant content and usage', async () => {
     const fetchImpl = async () => sseResponse([
       'data: {"choices":[{"delta":{"content":"po"}}]}\n\n',
@@ -75,6 +86,30 @@ describe('model prober', () => {
     const result = await probeModel(provider, 'key', 'model-a', fetchImpl as typeof fetch)
 
     expect(result.ok).toBe(false)
+  })
+
+  it('rejects HTTP 200 responses whose content is a platform availability notice', async () => {
+    const notice = [
+      'data: {"choices":[{"delta":{"content":"Sorry, to prevent abuse of free resources, accounts that have not"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":" been recharged can only try 10 times. You can increase the free quota after recharging"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ]
+    const fetchImpl = async () => sseResponse(notice)
+    const result = await probeModel(provider, 'key', 'coding-minimax-m3-free', fetchImpl as typeof fetch)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toMatch(/model unavailable/i)
+    }
+  })
+
+  it('matches platform availability notice keywords', () => {
+    expect(
+      modelProberInternals.findUnavailableContentPhrase(
+        'Sorry, to prevent abuse of free resources, accounts that have not been recharged can only try 10 times.',
+      ),
+    ).toMatch(/abuse of free resources/)
+    expect(modelProberInternals.findUnavailableContentPhrase('pong  [seed:abc123]')).toBeNull()
   })
 
   it('estimates tokens per second when usage is missing', () => {

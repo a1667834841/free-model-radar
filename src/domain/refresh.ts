@@ -23,14 +23,17 @@ export type RefreshLock = {
 
 import type { ModelResult } from './result'
 import type { DiscoveredModel } from './model'
+import type { TrendSample } from './trend'
 
 export type RefreshJobProvider = {
   id: string
   name: string
   baseUrl: string
+  secretName: string
   models: DiscoveredModel[]
   cursor: number
   successfulModels: ModelResult[]
+  trendSamples?: TrendSample[]
 }
 
 export type RefreshJob = {

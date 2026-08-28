@@ -30,6 +30,44 @@ export type ProbeResult = ProbeSuccess | ProbeFailure
 const PROBE_PROMPT = 'Reply with exactly: pong'
 const MAX_PROBE_TIMEOUT_MS = 25_000
 
+/**
+ * 平台在免费额度受限/滥用防护时返回的"提示"关键词。
+ * 这类响应 HTTP 200 且有内容，但并非模型的真实回答，应视为模型不可用。
+ */
+const UNAVAILABLE_CONTENT_PHRASES = [
+  'abuse of free resources',
+  'can only try 10 times',
+  'increase the free quota after recharging',
+  'free quota after recharging',
+]
+
+function makeProbeNonce(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+}
+
+/**
+ * 生成探测 prompt：附上一个每次不同的 seed，避免相同前缀命中模型 KV/前缀缓存，
+ * 从而让 TPS 反映真实生成吞吐而非缓存加速。
+ */
+export function buildProbePrompt(seed?: string): string {
+  const nonce = seed ?? makeProbeNonce()
+  return `${PROBE_PROMPT}  [seed:${nonce}]`
+}
+
+/**
+ * 判断 probe 返回的内容是否为平台"不可用/限流"提示文本。
+ * 命中时返回命中的关键词，否则返回 null。
+ */
+export function findUnavailableContentPhrase(content: string): string | null {
+  const normalized = content.toLowerCase()
+  for (const phrase of UNAVAILABLE_CONTENT_PHRASES) {
+    if (normalized.includes(phrase)) {
+      return phrase
+    }
+  }
+  return null
+}
+
 function extractAssistantContent(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null
   const choices = (payload as { choices?: unknown }).choices
@@ -89,8 +127,9 @@ function computeTokensPerSec(
 ): number | null {
   const tokens = completionTokens ?? estimateTokensFromContent(content)
   if (tokens == null) return null
-  const generationMs = Math.max(latencyMs - ttftMs, 1)
-  return tokens / (generationMs / 1000)
+  // 吞吐 = 一段时间内处理的 token 数 ÷ 用时（T 秒）。这里 T 用端到端耗时（latencyMs）。
+  const durationMs = Math.max(latencyMs, 1)
+  return tokens / (durationMs / 1000)
 }
 
 async function readStreamingProbe(
@@ -144,6 +183,7 @@ async function readStreamingProbe(
 
 async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: string, fetchImpl: typeof fetch): Promise<ProbeSuccess> {
   const startedAt = Date.now()
+  const probePrompt = buildProbePrompt()
   const { content, ttftMs, latencyMs, tokenUsage } = await withTimeout(async (signal) => {
     const response = await fetchImpl(provider.baseUrl.replace(/\/$/, '') + '/chat/completions', {
       method: 'POST',
@@ -154,7 +194,7 @@ async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: stri
       },
       body: JSON.stringify({
         model: modelId,
-        messages: [{ role: 'user', content: PROBE_PROMPT }],
+        messages: [{ role: 'user', content: probePrompt }],
         temperature: 0,
         max_tokens: 256,
         stream: true,
@@ -175,6 +215,11 @@ async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: stri
     throw new Error('Probe response does not contain valid assistant content')
   }
 
+  const unavailablePhrase = findUnavailableContentPhrase(content)
+  if (unavailablePhrase) {
+    throw new Error(`Probe response indicates model unavailable: "${unavailablePhrase}"`)
+  }
+
   const tokensPerSec = computeTokensPerSec(latencyMs, ttftMs, tokenUsage.completionTokens, content)
 
   return {
@@ -183,7 +228,7 @@ async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: stri
     latencyMs,
     ttftMs,
     tokensPerSec,
-    prompt: PROBE_PROMPT,
+    prompt: probePrompt,
     content,
     freeStatus: 'free',
     tokenUsage,
@@ -215,4 +260,5 @@ export const modelProberInternals = {
   extractDeltaContent,
   computeTokensPerSec,
   readStreamingProbe,
+  findUnavailableContentPhrase,
 }
