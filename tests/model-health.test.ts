@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyProbeFailure, isModelDueForProbe, isModelHidden, recordModelFailure, recordModelSuccess, restoreModel, type ModelHealthState } from '@/services/model-health-service'
+import { classifyProbeFailure, isModelDueForProbe, isModelHidden, recordModelFailure, recordModelSuccess, restoreModel, restoreProvider, type ModelHealthState } from '@/services/model-health-service'
 
 describe('model health', () => {
   it('hides a model after thirty consecutive request failures', () => {
@@ -35,6 +35,23 @@ describe('model health', () => {
     expect(isModelHidden(state, 'provider-a', 'model-a')).toBe(false)
     expect(state['provider-a:model-a'].consecutiveFailures).toBe(0)
     expect(state['provider-a:model-a'].requestFailureCount).toBe(0)
+    expect(state['provider-a:model-a'].lastCheckedAt).toBeNull()
+    expect(isModelDueForProbe(state, 'provider-a', 'model-a')).toBe(true)
+  })
+
+  it('restores all records for a provider', () => {
+    let state: ModelHealthState = {}
+    state = recordModelFailure(state, 'provider-a', 'model-a', '2026-08-27T09:00:00.000Z')
+    state = recordModelFailure(state, 'provider-a', 'model-b', '2026-08-27T09:00:00.000Z')
+    state = recordModelFailure(state, 'provider-b', 'model-c', '2026-08-27T09:00:00.000Z')
+
+    const result = restoreProvider(state, 'provider-a')
+
+    expect(result.restoredCount).toBe(2)
+    expect(result.state['provider-a:model-a'].requestFailureCount).toBe(0)
+    expect(result.state['provider-a:model-b'].requestFailureCount).toBe(0)
+    expect(result.state['provider-a:model-a'].lastCheckedAt).toBeNull()
+    expect(result.state['provider-b:model-c'].requestFailureCount).toBe(1)
   })
 
   it('rechecks successful models hourly and rate-limited models after two minutes', () => {

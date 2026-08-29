@@ -112,8 +112,29 @@ export function restoreModel(state: ModelHealthState, providerId: string, modelI
       requestFailureCount: 0,
       hidden: false,
       hiddenReason: null,
-      lastCheckedAt: new Date().toISOString(),
-      lastStatus: 'ok',
+      lastCheckedAt: null,
+      lastStatus: 'rate_limited',
     },
   }
+}
+
+export function restoreProvider(state: ModelHealthState, providerId: string): { state: ModelHealthState; restoredCount: number } {
+  let restoredCount = 0
+  const nextState: ModelHealthState = { ...state }
+
+  for (const [key, record] of Object.entries(state)) {
+    if (record.providerId !== providerId) continue
+    restoredCount += 1
+    nextState[key] = {
+      ...record,
+      consecutiveFailures: 0,
+      requestFailureCount: 0,
+      hidden: false,
+      hiddenReason: null,
+      lastCheckedAt: null,
+      lastStatus: 'rate_limited',
+    }
+  }
+
+  return { state: nextState, restoredCount }
 }
