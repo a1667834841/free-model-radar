@@ -6,10 +6,11 @@ import type { TrendSample } from '@/domain/trend'
 import { selectModelsForProbe, type DiscoveredModel } from '@/domain/model'
 import { createRefreshId, type RefreshJob, type RefreshJobProvider, type RefreshQueueMessage } from '@/domain/refresh'
 import { getProviderConfig } from '@/storage/provider-config-store'
-import { deleteRefreshJob, getLatestResults, getRefreshJob, putLatestResults, putRefreshJob, putRefreshStatus } from '@/storage/results-store'
+import { getLatestResults, getRefreshJob, putLatestResults, putRefreshStatus } from '@/storage/results-store'
 import { appendTrendSamples, getTrendResponse } from '@/storage/trend-store'
-import { getModelHealthState, putModelHealthState } from '@/storage/model-health-store'
+import { getModelHealthState } from '@/storage/model-health-store'
 import { acquireRefreshLock, releaseRefreshLock } from '@/storage/refresh-lock'
+import { patchRefreshRuntimeState } from '@/storage/refresh-runtime-store'
 import { discoverModels } from './provider-discovery'
 import { probeModel } from './model-prober'
 import { classifyProbeFailure, isModelDueForProbe, isModelHidden, recordModelFailure, recordModelSuccess, type ModelHealthState } from './model-health-service'
@@ -100,34 +101,38 @@ export async function runRefresh(env: RadarEnv, refreshId: string, fetchImpl: ty
       const t1 = Date.now()
       job = await createRefreshJob(env, refreshId, config.providers.filter((provider) => provider.enabled), config.version, fetchImpl)
       log(refreshId, 'runRefresh: created new job', { tookMs: Date.now() - t1, total: job.total, providers: job.providers.length })
-      await putRefreshJob(env.RADAR_KV, job)
-      await putRefreshStatus(env.RADAR_KV, {
-        status: 'running',
-        refreshId,
-        startedAt: job.startedAt,
-        finishedAt: null,
-        error: null,
-        configVersion: config.version,
-        progress: { completed: 0, total: job.total },
+      await patchRefreshRuntimeState(env.RADAR_KV, {
+        refreshJob: job,
+        refreshStatus: {
+          status: 'running',
+          refreshId,
+          startedAt: job.startedAt,
+          finishedAt: null,
+          error: null,
+          configVersion: config.version,
+          progress: { completed: 0, total: job.total },
+        },
       })
     }
 
     const healthState = await getModelHealthState(env.RADAR_KV)
     const batch = await processNextBatch(job, env, healthState, fetchImpl)
     job = batch.job
-    await putModelHealthState(env.RADAR_KV, batch.healthState)
     log(refreshId, 'runRefresh: batch processed', { completed: job.completed, total: job.total, tookMs: Date.now() - runStartMs })
 
     if (job.completed < job.total) {
-      await putRefreshJob(env.RADAR_KV, job)
-      await putRefreshStatus(env.RADAR_KV, {
-        status: 'running',
-        refreshId,
-        startedAt: job.startedAt,
-        finishedAt: null,
-        error: null,
-        configVersion: config.version,
-        progress: { completed: job.completed, total: job.total },
+      await patchRefreshRuntimeState(env.RADAR_KV, {
+        refreshJob: job,
+        refreshStatus: {
+          status: 'running',
+          refreshId,
+          startedAt: job.startedAt,
+          finishedAt: null,
+          error: null,
+          configVersion: config.version,
+          progress: { completed: job.completed, total: job.total },
+        },
+        modelHealthState: batch.healthState,
       })
       return
     }
@@ -146,28 +151,33 @@ export async function runRefresh(env: RadarEnv, refreshId: string, fetchImpl: ty
     const missingTrendSamples = createMissingTrendSamples(existingTrends.modelStats, currentTrendSamples, snapshot.updatedAt)
     await putLatestResults(env.RADAR_KV, snapshot)
     await appendTrendSamples(env.RADAR_KV, [...currentTrendSamples, ...missingTrendSamples])
-    await deleteRefreshJob(env.RADAR_KV)
-    await putRefreshStatus(env.RADAR_KV, {
-      status: 'success',
-      refreshId,
-      startedAt: job.startedAt,
-      finishedAt: new Date().toISOString(),
-      error: null,
-      configVersion: config.version,
-      progress: { completed: job.total, total: job.total },
+    await patchRefreshRuntimeState(env.RADAR_KV, {
+      refreshJob: null,
+      refreshStatus: {
+        status: 'success',
+        refreshId,
+        startedAt: job.startedAt,
+        finishedAt: new Date().toISOString(),
+        error: null,
+        configVersion: config.version,
+        progress: { completed: job.total, total: job.total },
+      },
+      modelHealthState: batch.healthState,
     })
   } catch (error) {
     log(refreshId, 'runRefresh: FAILED', { error: safeErrorMessage(error), tookMs: Date.now() - runStartMs })
-    await putRefreshStatus(env.RADAR_KV, {
-      status: 'failed',
-      refreshId,
-      startedAt,
-      finishedAt: new Date().toISOString(),
-      error: safeErrorMessage(error),
-      configVersion: null,
-      progress: null,
+    await patchRefreshRuntimeState(env.RADAR_KV, {
+      refreshJob: null,
+      refreshStatus: {
+        status: 'failed',
+        refreshId,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        error: safeErrorMessage(error),
+        configVersion: null,
+        progress: null,
+      },
     })
-    await deleteRefreshJob(env.RADAR_KV)
   } finally {
     // 锁由调用方（Queue consumer）负责释放，这里只记录耗时。
     log(refreshId, 'runRefresh: done', { tookMs: Date.now() - runStartMs })

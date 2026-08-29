@@ -3,6 +3,7 @@ import { runRefresh, startRefresh, processRefreshMessage } from '@/services/refr
 import type { RadarEnv } from '@/domain/env'
 import type { RefreshQueueMessage } from '@/domain/refresh'
 import { recordModelFailure, recordModelSuccess, type ModelHealthState } from '@/services/model-health-service'
+import { getRefreshRuntimeState } from '@/storage/refresh-runtime-store'
 
 function streamingProbeResponse(usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }) {
   const chunks = [
@@ -165,13 +166,13 @@ describe('mock provider refresh', () => {
 
     const refreshId = 'refresh-batched'
     await runRefresh(env, refreshId, fetchImpl as typeof fetch)
-    let status = JSON.parse((await kv.get('latest-refresh-status')) ?? 'null')
-    while (status.status === 'running') {
+    let status = (await getRefreshRuntimeState(kv as unknown as KVNamespace)).refreshStatus
+    while (status?.status === 'running') {
       await runRefresh(env, refreshId, fetchImpl as typeof fetch)
-      status = JSON.parse((await kv.get('latest-refresh-status')) ?? 'null')
+      status = (await getRefreshRuntimeState(kv as unknown as KVNamespace)).refreshStatus
     }
 
-    expect(status.status).toBe('success')
+    expect(status?.status).toBe('success')
     expect(probedModels).toEqual(modelIds)
   })
 
@@ -380,13 +381,14 @@ describe('mock provider refresh', () => {
       guard += 1
     }
 
-    const status = JSON.parse((await kv.get('latest-refresh-status')) ?? 'null')
-    expect(status.status).toBe('success')
-    expect(status.progress.completed).toBe(12)
-    expect(status.progress.total).toBe(12)
+    const runtimeState = await getRefreshRuntimeState(kv as unknown as KVNamespace)
+    const status = runtimeState.refreshStatus
+    expect(status?.status).toBe('success')
+    expect(status?.progress?.completed).toBe(12)
+    expect(status?.progress?.total).toBe(12)
 
     // 完成后 job 应被删除，不再继续入队
-    expect(await kv.get('refresh-job')).toBeNull()
+    expect(runtimeState.refreshJob).toBeNull()
     expect(sent).toHaveLength(0)
   })
 
@@ -551,11 +553,11 @@ describe('mock provider refresh', () => {
     await runRefresh(env, 'refresh-rate-limited', fetchImpl as typeof fetch)
 
     const latestResults = JSON.parse((await kv.get('latest-results')) ?? 'null')
-    const healthState = JSON.parse((await kv.get('model-health-state')) ?? '{}')
+    const runtimeState = await getRefreshRuntimeState(kv as unknown as KVNamespace)
     expect(latestResults.providers[0].models).toHaveLength(1)
     expect(latestResults.providers[0].models[0].content).toBe('old content')
-    expect(healthState['provider-a:free-model'].lastStatus).toBe('rate_limited')
-    expect(healthState['provider-a:free-model'].requestFailureCount).toBe(1)
+    expect(runtimeState.modelHealthState['provider-a:free-model'].lastStatus).toBe('rate_limited')
+    expect(runtimeState.modelHealthState['provider-a:free-model'].requestFailureCount).toBe(1)
   })
 
   it('keeps disappeared historical models as missing trend samples', async () => {

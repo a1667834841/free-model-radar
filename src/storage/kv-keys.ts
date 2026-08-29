@@ -4,6 +4,7 @@ export const KV_KEYS = {
   latestRefreshStatus: 'latest-refresh-status',
   modelHealthState: 'model-health-state',
   refreshLock: 'refresh-lock',
+  refreshRuntimeState: 'refresh-runtime-state',
   refreshJob: 'refresh-job',
   trendPrefix: 'trend:',
 } as const

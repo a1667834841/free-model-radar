@@ -19,13 +19,17 @@ class EventuallySuccessfulGetKV {
       throw new Error('KV GET failed: 500 Internal Server Error')
     }
     return JSON.stringify({
-      status: 'success',
-      refreshId: 'refresh-test',
-      startedAt: '2026-08-27T09:00:00.000Z',
-      finishedAt: '2026-08-27T09:01:00.000Z',
-      error: null,
-      configVersion: 1,
-      progress: { completed: 1, total: 1 },
+      refreshJob: null,
+      modelHealthState: {},
+      refreshStatus: {
+        status: 'success',
+        refreshId: 'refresh-test',
+        startedAt: '2026-08-27T09:00:00.000Z',
+        finishedAt: '2026-08-27T09:01:00.000Z',
+        error: null,
+        configVersion: 1,
+        progress: { completed: 1, total: 1 },
+      },
     })
   }
 }
