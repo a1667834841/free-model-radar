@@ -14,6 +14,8 @@ type AgentConfigExportProps = {
   models: FlattenedModel[]
   /** 仅展示指定导出目标：某个 agent id，或 'free-ids' 只展示免费模型 ID */
   exportTarget?: string
+  /** 每次用户主动请求复制时递增；避免页面初始化/刷新触发剪贴板写入 */
+  copySignal?: number
   /** 精简模式：仅自动复制并显示中央提示，不渲染 Provider/模型选择与配置卡片面板 */
   compact?: boolean
 }
@@ -53,7 +55,7 @@ function CopyIcon() {
   )
 }
 
-export default function AgentConfigExport({ providers, models, exportTarget, compact }: AgentConfigExportProps) {
+export default function AgentConfigExport({ providers, models, exportTarget, copySignal = 0, compact }: AgentConfigExportProps) {
   const { t } = useI18n()
 
   // 只有具备 baseUrl 且存在免费模型的 Provider 才可导出
@@ -108,23 +110,53 @@ export default function AgentConfigExport({ providers, models, exportTarget, com
   }, [agentConfigs, exportTarget])
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [toastLeaving, setToastLeaving] = useState(false)
+  // 按钮级复制反馈：成功/失败均闪烁 1.4s 后还原，与 json-viewer 一致；toast 仍由 copiedKey 驱动
+  const [copyFlash, setCopyFlash] = useState<{ key: string; ok: boolean } | null>(null)
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (!copiedKey) return
-    const timer = setTimeout(() => setCopiedKey(null), 1800)
-    return () => clearTimeout(timer)
+    setToastLeaving(false)
+    // 先播退出动画（1550ms 起），动画播完再卸载（1800ms）
+    const leave = setTimeout(() => setToastLeaving(true), 1550)
+    const done = setTimeout(() => setCopiedKey(null), 1800)
+    return () => {
+      clearTimeout(leave)
+      clearTimeout(done)
+    }
   }, [copiedKey])
 
   const handleCopy = useCallback(async (text: string, key: string) => {
     const ok = await copyText(text)
+    setCopyFlash({ key, ok })
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    flashTimerRef.current = setTimeout(() => setCopyFlash(null), 1400)
     if (ok) setCopiedKey(key)
   }, [])
 
-  // 在下拉框选中某 Agent 时自动复制对应配置，并提示已复制
+  const copyBtnLabel = useCallback((key: string, idleLabel: string) => {
+    if (copyFlash?.key !== key) return idleLabel
+    return copyFlash.ok ? t('agent.copied') : t('agent.copyFailed')
+  }, [copyFlash, t])
+
+  const copyBtnClass = useCallback((key: string) => {
+    return `agent-copy-btn${copyFlash?.key === key && copyFlash.ok ? ' copied' : ''}`
+  }, [copyFlash])
+
+  // 只响应用户主动选择，不在页面初始化或刷新时写剪贴板。
   const lastAutoTarget = useRef<string | null>(null)
   useEffect(() => {
-    if (!exportTarget || lastAutoTarget.current === exportTarget) return
-    lastAutoTarget.current = exportTarget
+    if (!exportTarget || copySignal <= 0) return
+    const autoKey = `${copySignal}:${exportTarget}`
+    if (lastAutoTarget.current === autoKey) return
+    lastAutoTarget.current = autoKey
     if (exportTarget === 'free-ids') {
       const text = freeModels.map((m) => m.id).join('\n')
       if (text) handleCopy(text, 'all-models')
@@ -132,7 +164,7 @@ export default function AgentConfigExport({ providers, models, exportTarget, com
     }
     const target = agentConfigs.find((a) => a.option.id === exportTarget)
     if (target) handleCopy(target.content, exportTarget)
-  }, [exportTarget, agentConfigs, freeModels, handleCopy])
+  }, [exportTarget, copySignal, agentConfigs, freeModels, handleCopy])
 
   if (exportableProviders.length === 0) {
     if (compact) return null
@@ -155,7 +187,7 @@ export default function AgentConfigExport({ providers, models, exportTarget, com
   return (
     <section className="agent-export">
       {copiedKey && (
-        <div className="agent-copy-toast" role="status">
+        <div className="agent-copy-toast" role="status" data-leaving={toastLeaving ? 'true' : undefined}>
           <span className="agent-copy-toast-check" aria-hidden="true">✓</span>
           {t('agent.copied')}
         </div>
@@ -199,11 +231,11 @@ export default function AgentConfigExport({ providers, models, exportTarget, com
           <span>{t('agent.modelIds')}</span>
           <button
             type="button"
-            className="agent-copy-btn"
+            className={copyBtnClass('all-models')}
             onClick={() => handleCopy(freeModels.map((m) => m.id).join('\n'), 'all-models')}
           >
             <CopyIcon />
-            {copiedKey === 'all-models' ? t('agent.copied') : t('agent.copyAll')}
+            {copyBtnLabel('all-models', t('agent.copyAll'))}
           </button>
         </div>
         {freeModels.length === 0 ? (
@@ -236,11 +268,11 @@ export default function AgentConfigExport({ providers, models, exportTarget, com
                 </div>
                 <button
                   type="button"
-                  className="agent-copy-btn"
+                  className={copyBtnClass(option.id)}
                   onClick={() => handleCopy(content, option.id)}
                 >
                   <CopyIcon />
-                  {copiedKey === option.id ? t('agent.copied') : t('agent.copy')}
+                  {copyBtnLabel(option.id, t('agent.copy'))}
                 </button>
               </div>
               <div className="agent-compat">{option.compatibility}</div>

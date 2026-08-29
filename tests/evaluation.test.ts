@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeStreamingScore, getEvaluationMethod } from '@/domain/evaluation'
+import { computeStreamingScore, findFastestTtftModel, getEvaluationMethod } from '@/domain/evaluation'
 import type { FlattenedModel } from '@/domain/evaluation'
 
 function makeModel(overrides: Partial<FlattenedModel> & Pick<FlattenedModel, 'id' | 'providerId' | 'providerName'>): FlattenedModel {
@@ -51,6 +51,40 @@ describe('streaming performance evaluation', () => {
 
     expect(ranked[0].ttftMs).toBe(1200)
     expect(ranked[0].tokensPerSec).toBeCloseTo(20 / 1.2)
+    expect(ranked[0].tpsQuality).toBe('provider-usage')
+  })
+
+  it('keeps content-estimated throughput out of composite score', () => {
+    const method = getEvaluationMethod('streaming-performance')
+    const ranked = method.rank([
+      makeModel({
+        id: 'estimated',
+        providerId: 'a',
+        providerName: 'A',
+        tokensPerSec: 1000,
+        tokenUsage: { promptTokens: null, completionTokens: null, totalTokens: null },
+      }),
+      makeModel({
+        id: 'measured',
+        providerId: 'b',
+        providerName: 'B',
+        tokensPerSec: 50,
+        tokenUsage: { promptTokens: 10, completionTokens: 8, totalTokens: 18 },
+      }),
+    ])
+
+    expect(ranked.find((model) => model.id === 'estimated')?.tpsQuality).toBe('estimated')
+    expect(ranked.find((model) => model.id === 'estimated')?.score).toBeNull()
+    expect(ranked[0].id).toBe('measured')
+  })
+
+  it('finds fastest TTFT independently from composite ranking', () => {
+    const fastest = findFastestTtftModel([
+      makeModel({ id: 'best-score', providerId: 'a', providerName: 'A', ttftMs: 300, tokensPerSec: 200 }),
+      makeModel({ id: 'fastest-ttft', providerId: 'b', providerName: 'B', ttftMs: 120, tokensPerSec: 20 }),
+    ])
+
+    expect(fastest).toEqual({ id: 'fastest-ttft', ttftMs: 120 })
   })
 })
 

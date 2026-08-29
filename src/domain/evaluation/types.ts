@@ -8,6 +8,7 @@ export type FlattenedModel = ModelResult & {
 export type EvaluationMetrics = {
   ttftMs: number | null
   tokensPerSec: number | null
+  tpsQuality: TpsQuality
   score: number | null
 }
 
@@ -38,18 +39,21 @@ export type EvaluationColumn = {
   format: (model: RankedModel, locale: 'zh' | 'en') => string
 }
 
-export function resolveStreamingMetrics(model: FlattenedModel): { ttftMs: number; tokensPerSec: number | null } {
+export type TpsQuality = 'measured' | 'provider-usage' | 'estimated' | 'unavailable'
+
+export function resolveStreamingMetrics(model: FlattenedModel): { ttftMs: number; tokensPerSec: number | null; tpsQuality: TpsQuality } {
   const ttftMs = model.ttftMs ?? model.latencyMs
   if (model.tokensPerSec != null) {
-    return { ttftMs, tokensPerSec: model.tokensPerSec }
+    const tpsQuality = model.tokenUsage.completionTokens != null ? 'measured' : 'estimated'
+    return { ttftMs, tokensPerSec: model.tokensPerSec, tpsQuality }
   }
   const completionTokens = model.tokenUsage.completionTokens
-  if (completionTokens == null) return { ttftMs, tokensPerSec: null }
+  if (completionTokens == null) return { ttftMs, tokensPerSec: null, tpsQuality: 'unavailable' }
   // Legacy snapshots lack separate TTFT — approximate throughput over total latency.
   const durationMs = model.ttftMs != null
     ? Math.max(model.latencyMs - ttftMs, 1)
     : model.latencyMs
-  return { ttftMs, tokensPerSec: completionTokens / (durationMs / 1000) }
+  return { ttftMs, tokensPerSec: completionTokens / (durationMs / 1000), tpsQuality: 'provider-usage' }
 }
 
 export function estimateTokensFromContent(content: string | null): number | null {

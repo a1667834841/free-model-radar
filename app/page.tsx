@@ -34,8 +34,6 @@ export default async function Page() {
     city: rawCity ? decodeCity(rawCity) : null,
     country: headerStore.get('x-open-next-country') ?? null,
     region: headerStore.get('x-open-next-region') ?? null,
-    // Cloudflare Workers 原生注入的访问者 IP（部署节点出口 IP）
-    ip: headerStore.get('cf-connecting-ip') ?? null,
   }
 
   const updatedAt = results?.updatedAt ? new Date(results.updatedAt).toISOString() : null

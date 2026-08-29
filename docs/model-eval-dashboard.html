@@ -1,0 +1,1418 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>模型评测看板 · free router</title>
+<style>
+  /* ─── tokens (bound from the live app palette; single source of truth) ─── */
+  :root {
+    --bg:      #0A1118;
+    --surface: #111C26;
+    --fg:      #E8F0F4;
+    --muted:   #7E95A4;
+    --border:  #1E2E3B;
+    --accent:  #F0A35E;
+
+    /* extended dashboard palette — all colors live here, none elsewhere */
+    --panel:      #111C26;
+    --line-light: #2A3E4C;
+    --ink-dim:    #7E95A4;
+    --ink-faint:  #6E8896;
+    --cyan:       #5FB8CE;
+    --green:      #3FCF8E;
+    --purple:     #A78BFA;
+    --red:        #E2625F;
+    --track:      #1A2A36;
+    --lat-fast:   #3FCF8E;
+    --lat-mid:    #E8B44C;
+    --lat-slow:   #E2625F;
+    --prov-bai:   #E879A8;
+    --prov-or:    #F0A35E;
+    --prov-sn:    #A78BFA;
+
+    --accent-soft: color-mix(in oklch, var(--accent) 16%, transparent);
+    --green-soft:  color-mix(in oklch, var(--green) 14%, transparent);
+    --cyan-soft:   color-mix(in oklch, var(--cyan) 14%, transparent);
+
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 8px 32px rgba(0,0,0,.28);
+
+    --ease-out:    cubic-bezier(.23,1,.32,1);
+    --ease-in-out: cubic-bezier(.77,0,.175,1);
+
+    --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-body:    'Inter', ui-sans-serif, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-mono:    ui-monospace, 'SF Mono', 'JetBrains Mono', 'SFMono-Regular', Menlo, monospace;
+
+    --container: 1280px;
+
+    /* shared grid so header & cells always line up */
+    --model-cols: 44px minmax(168px,1.6fr) minmax(96px,.8fr) minmax(120px,1.3fr) 76px 72px 76px 62px 56px 20px;
+    --prov-cols:  210px 1fr 262px;
+    --trend-cols: minmax(170px,1.5fr) minmax(100px,.8fr) repeat(5,minmax(76px,.6fr));
+    --fs-h1: clamp(28px, 4vw, 38px);
+    --fs-kpi: clamp(28px, 3vw, 34px);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  img, svg { display: block; max-width: 100%; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; cursor: pointer; }
+  p { text-wrap: pretty; }
+  h1, h2, h3 { text-wrap: balance; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: var(--accent-soft); color: var(--fg); }
+
+  .container { max-width: var(--container); margin-inline: auto; padding-inline: 32px; }
+
+  .num, .tabular { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  .mono-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .2em; font-weight: 700; text-transform: uppercase; color: var(--ink-faint); }
+
+  /* ─── topbar ─── */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .topbar-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--accent); color: var(--bg); box-shadow: 0 0 22px color-mix(in oklch, var(--accent) 28%, transparent); }
+  .brand-mark svg { width: 20px; height: 20px; }
+  .brand-tagline { display: inline-flex; align-items: baseline; gap: 5px; color: var(--ink-dim); font-size: 13px; font-weight: 700; letter-spacing: -.01em; font-family: var(--font-display); white-space: nowrap; text-transform: uppercase; }
+  .brand-tagline .brand-lite { font-weight: 500; color: var(--ink-faint); }
+  .brand-tagline .brand-strong { font-weight: 800; color: var(--fg); }
+  .topbar-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 8px 12px; font-size: 11px; color: var(--ink-dim); }
+  .chip.geo { border-color: color-mix(in oklch, var(--purple) 30%, transparent); color: var(--purple); }
+  .chip.fresh { border-color: color-mix(in oklch, var(--green) 30%, transparent); color: var(--lat-fast); }
+  .chip .pulse { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .topbar-ts { color: var(--ink-faint); font-size: 11px; font-family: var(--font-mono); }
+  .lang-switch { display: grid; grid-template-columns: repeat(2,1fr); gap: 2px; height: 34px; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); }
+  .lang-opt { border: 0; border-radius: 5px; background: transparent; color: var(--ink-faint); font-size: 10px; font-weight: 800; letter-spacing: .04em; padding: 0 8px; transition: background .2s, color .2s; }
+  .lang-opt.active { background: var(--accent-soft); color: var(--accent); }
+  .gh-link { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); color: var(--ink-dim); transition: color .2s, border-color .2s; }
+
+  /* ─── hero ─── */
+  .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 26px 0 22px; flex-wrap: wrap; }
+  .hero-eyebrow { color: var(--ink-faint); font-size: 10px; letter-spacing: .2em; font-weight: 800; }
+  .hero-title { margin: 6px 0 0; font-size: var(--fs-h1); letter-spacing: -.05em; font-weight: 800; color: var(--fg); font-family: var(--font-display); line-height: 1.12; }
+  .hero-subtitle { margin: 7px 0 0; color: var(--ink-dim); font-size: 13px; }
+  .hero-cta { display: inline-flex; align-items: center; gap: 10px; }
+
+  /* buttons */
+  .btn { display: inline-flex; align-items: center; gap: 7px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 700; padding: 9px 14px; border: 1px solid transparent; transition: background .18s, border-color .18s, color .18s, transform .16s var(--ease-out), box-shadow .18s; }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--accent); color: var(--bg); box-shadow: 0 6px 18px color-mix(in oklch, var(--accent) 20%, transparent); }
+  .btn-primary:hover { box-shadow: 0 10px 24px color-mix(in oklch, var(--accent) 30%, transparent); transform: translateY(-1px); }
+  .btn-ghost { background: transparent; color: var(--ink-dim); border-color: var(--border); }
+  .btn-ghost:hover { border-color: var(--line-light); color: var(--fg); }
+
+  /* ─── KPI cards ─── */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+  .kpi-hero { grid-column: 1 / 3; position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; background: linear-gradient(145deg, color-mix(in oklch, var(--panel) 96%, transparent), color-mix(in oklch, var(--bg) 96%, transparent)); min-height: 150px; display: flex; flex-direction: column; justify-content: space-between; }
+  .kpi-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .kpi-eyebrow { color: var(--ink-faint); font-size: 10px; letter-spacing: .2em; font-weight: 800; text-transform: uppercase; }
+  .kpi-status { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-faint); font-size: 10px; font-weight: 800; white-space: nowrap; }
+  .kpi-status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+  .kpi-big { margin: 14px 0 2px; color: var(--accent); font-size: clamp(30px, 3.4vw, 40px); font-weight: 800; letter-spacing: -.06em; font-family: var(--font-mono); font-variant-numeric: tabular-nums; display: inline-flex; align-items: baseline; }
+  .kpi-big small { margin-left: 5px; color: var(--ink-dim); font-size: 13px; font-weight: 600; letter-spacing: 0; }
+  .kpi-who { margin-top: 2px; color: var(--ink-dim); font-size: 12px; }
+  .meter { margin-top: 14px; display: flex; align-items: center; gap: 10px; }
+  .meter-track { flex: 1; height: 5px; border-radius: 999px; background: var(--track); overflow: hidden; }
+  .meter-fill { height: 100%; border-radius: 999px; }
+  .meter-fill.accent { background: var(--accent); }
+  .meter-note { color: var(--ink-faint); font-size: 10px; font-family: var(--font-mono); letter-spacing: -.01em; white-space: nowrap; }
+
+  .kpi-card { position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; background: linear-gradient(145deg, color-mix(in oklch, var(--panel) 96%, transparent), color-mix(in oklch, var(--bg) 96%, transparent)); display: flex; flex-direction: column; justify-content: space-between; min-height: 150px; }
+  .kpi-card .kpi-label { color: var(--ink-faint); font-size: 11px; display: flex; justify-content: space-between; align-items: baseline; }
+  .kpi-card .kpi-value { margin: 12px 0 3px; color: var(--fg); font-size: var(--fs-kpi); font-weight: 800; letter-spacing: -.06em; font-family: var(--font-mono); font-variant-numeric: tabular-nums; display: inline-flex; align-items: baseline; }
+  .kpi-card .kpi-value small { margin-left: 4px; color: var(--ink-dim); font-size: 12px; letter-spacing: 0; }
+  .kpi-card .kpi-detail { color: var(--ink-dim); font-size: 11px; line-height: 1.5; }
+  @media (max-width: 1050px) { .kpis { grid-template-columns: repeat(2, 1fr); } .kpi-hero { grid-column: 1 / -1; } }
+  @media (max-width: 600px) { .kpis { grid-template-columns: 1fr; } }
+
+  /* ─── page tabs ─── */
+  .tabs { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); width: min(360px,100%); margin: 4px 0 20px; padding: 3px; border: 1px solid var(--line-light); border-radius: var(--radius-sm); background: var(--panel); }
+  .tab { border: 0; border-radius: 6px; padding: 8px 14px; background: transparent; color: var(--ink-faint); font-size: 12px; font-weight: 800; white-space: nowrap; transition: background .2s, color .2s; }
+  .tab.active { background: var(--accent-soft); color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--ink-dim); }
+
+  .view { display: none; }
+  .view.active { display: block; animation: fade-in .3s both; }
+
+  /* ─── section headers ─── */
+  .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+  .section-kicker { display: block; color: var(--ink-dim); font-size: 10px; letter-spacing: .2em; font-weight: 800; text-transform: uppercase; }
+  .section-hint { display: block; margin-top: 4px; color: var(--ink-faint); font-size: 11px; }
+  .help-dot { position: relative; display: inline-grid; place-items: center; width: 15px; height: 15px; border: 1px solid var(--line-light); border-radius: 50%; color: var(--ink-faint); font-size: 9px; font-style: normal; font-weight: 800; }
+  .help-dot:hover { border-color: color-mix(in oklch, var(--accent) 50%, transparent); color: var(--accent); }
+  .help-dot[data-tip]:hover::after { content: attr(data-tip); position: absolute; right: 50%; bottom: calc(100% + 8px); z-index: 30; width: max-content; max-width: 260px; padding: 8px 10px; border: 1px solid var(--line-light); border-radius: var(--radius-sm); background: color-mix(in oklch, var(--bg) 55%, var(--panel)); box-shadow: var(--shadow); color: var(--fg); font-size: 10px; font-weight: 500; line-height: 1.45; white-space: normal; transform: translate(50%, 4px); }
+  .rank-toggle .help-dot[data-tip]:hover::after { white-space: pre; max-width: 340px; font-family: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; letter-spacing: -.01em; line-height: 1.7; }
+
+  .section { margin-bottom: 20px; }
+
+  /* ─── rank export toolbar + JSON viewer ─── */
+  .rank-toggle { display: inline-flex; align-items: center; gap: 9px; border: 0; padding: 0; background: transparent; cursor: pointer; color: var(--ink-dim); font-size: 10px; letter-spacing: .2em; font-weight: 800; text-transform: uppercase; transition: color .18s; }
+  .rank-toggle:hover { color: var(--fg); }
+  .rank-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+  .rank-toggle .rank-caret { display: inline-grid; place-items: center; transition: transform .2s var(--ease-out); }
+  .rank-toggle[aria-expanded="true"] .rank-caret { transform: rotate(180deg); }
+  .export-bar { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .export-control { display: inline-flex; align-items: center; gap: 6px; }
+  .export-control .mono-eyebrow { white-space: nowrap; }
+  .export-select { border: 1px solid var(--line-light); background: var(--panel); color: var(--fg); border-radius: var(--radius-sm); font-size: 12px; font-weight: 700; font-family: var(--font-mono); padding: 7px 10px; margin-left: 8px; outline: none; cursor: pointer; transition: border-color .18s, color .18s; -webkit-appearance: none; appearance: none; background-image: none; }
+  .export-select:hover { border-color: var(--ink-faint); color: var(--fg); }
+  .export-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .export-btn { border-color: var(--line-light); color: var(--ink-dim); }
+  .export-btn:hover { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 25%, transparent); transform: none; }
+  .export-btn.copied { color: var(--green); border-color: color-mix(in oklch, var(--green) 45%, transparent); box-shadow: 0 0 0 1px color-mix(in oklch, var(--green) 30%, transparent); transform: none; }
+  .export-btn:disabled { opacity: .45; cursor: default; transform: none; box-shadow: none; }
+  .json-viewer { display: none; margin-top: 12px; border: 1px solid var(--line-light); border-radius: var(--radius); background: color-mix(in oklch, var(--panel) 92%, transparent); overflow: hidden; }
+  .json-viewer.open { display: block; animation: view-in .26s var(--ease-out) both; }
+  @keyframes view-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  .json-viewer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line-light); background: color-mix(in oklch, var(--bg) 50%, var(--panel)); }
+  .json-viewer-title { display: inline-flex; align-items: center; gap: 8px; }
+  .json-sample { border: 1px solid var(--line-light); border-radius: 999px; padding: 3px 8px; color: var(--ink-faint); font-size: 9px; font-family: var(--font-mono); letter-spacing: .1em; font-weight: 800; text-transform: uppercase; }
+  .json-viewer-actions { display: inline-flex; gap: 6px; }
+  .json-btn { border: 1px solid var(--line-light); background: transparent; color: var(--ink-dim); border-radius: var(--radius-sm); font-size: 11px; font-weight: 700; padding: 6px 11px; cursor: pointer; transition: color .18s, border-color .18s, background .18s; }
+  .json-btn:hover { color: var(--fg); border-color: var(--ink-faint); }
+  .json-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .json-btn.copy.copied { color: var(--green); border-color: color-mix(in oklch, var(--green) 45%, transparent); }
+  .json-btn.primary { color: var(--accent); border-color: color-mix(in oklch, var(--accent) 40%, transparent); }
+  .json-btn.primary:hover { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in oklch, var(--accent) 60%, transparent); }
+  .json-code { max-height: 340px; overflow: auto; scrollbar-color: var(--line-light) transparent; scrollbar-width: thin; }
+  .json-code pre { margin: 0; padding: 14px 16px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.7; color: var(--fg); font-variant-numeric: tabular-nums; white-space: pre; }
+  .json-code .k { color: var(--purple); }
+  .json-code .s { color: var(--green); }
+  .json-code .num { color: var(--accent); }
+  .json-code .meta { color: var(--ink-faint); }
+
+  /* ─── provider overview ─── */
+  .overview-list { display: grid; gap: 8px; }
+  .prov-row { display: grid; grid-template-columns: var(--prov-cols); gap: 16px; align-items: center; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); transition: border-color .2s; min-height: 56px; }
+  .prov-row:hover { border-color: var(--line-light); }
+  .prov-id { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .prov-fav { flex: 0 0 18px; width: 18px; height: 18px; border-radius: 5px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: color-mix(in oklch, var(--prov, var(--fg)) 16%, transparent); border: 1px solid color-mix(in oklch, var(--prov, var(--fg)) 24%, transparent); }
+  .prov-fav img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .prov-name { overflow: hidden; color: var(--fg); font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; transition: color .18s; }
+  .prov-name:hover { color: var(--accent); }
+  .prov-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+  .prov-status { font-size: 10px; color: var(--lat-fast); font-weight: 600; letter-spacing: .04em; flex-shrink: 0; }
+  .prov-status.idle { color: var(--lat-mid); }
+  .prov-bar { position: relative; }
+  .prov-track { position: relative; height: 10px; background: var(--track); border-radius: 6px; }
+  .prov-range { position: absolute; top: 0; bottom: 0; border-radius: 6px; left: var(--lo, 0%); width: max(var(--wid, 0%), 2%); background: linear-gradient(90deg, var(--lat-fast), var(--lat-mid), var(--lat-slow)); transition: left .6s var(--ease-out), width .6s var(--ease-out); }
+  .prov-mid { position: absolute; top: -3px; bottom: -3px; width: 2px; background: color-mix(in oklch, var(--fg) 82%, transparent); border-radius: 1px; left: var(--mid, 0%); }
+  .prov-scale { display: flex; justify-content: space-between; margin-top: 6px; color: var(--ink-faint); font-size: 10px; font-family: var(--font-mono); }
+  .prov-nums { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 600; }
+  .prov-nums small { margin-left: 2px; font-weight: 400; font-size: 10px; color: var(--ink-faint); }
+  .pf-fast { color: var(--lat-fast); } .pf-mid { color: var(--lat-mid); } .pf-slow { color: var(--lat-slow); }
+  .prov-sep { color: var(--ink-faint); font-size: 10px; }
+  .prov-na { color: var(--ink-faint); }
+  .prov-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; padding: 0 2px; color: var(--ink-dim); font-size: 10px; }
+  .prov-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .prov-legend i { width: 8px; height: 8px; border-radius: 50%; }
+  .prov-legend b { font-weight: 600; color: var(--ink-dim); }
+  @media (max-width: 1050px) { .prov-row { grid-template-columns: 180px 1fr; } .prov-nums { display: none; } }
+  @media (max-width: 720px) { .prov-row { grid-template-columns: 1fr; } .prov-nums { display: flex; } }
+
+  /* ─── model ranking table (aligned grid) ─── */
+  .model-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+  .model-scroll { max-height: calc(100vh - 180px); overflow: auto; border-radius: var(--radius); scrollbar-color: var(--line-light) transparent; scrollbar-width: thin; }
+  .model-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .model-scroll::-webkit-scrollbar-thumb { background: var(--line-light); border-radius: 6px; }
+  .model-head { display: grid; grid-template-columns: var(--model-cols); gap: 10px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--track) 55%, transparent); position: sticky; top: 0; z-index: 5; backdrop-filter: blur(4px); }
+  .model-head span { color: var(--ink-faint); font-size: 9px; letter-spacing: .04em; font-family: var(--font-mono); text-transform: uppercase; display: flex; align-items: center; }
+  .mh-right { justify-content: flex-end; text-align: right; }
+  .mh-center { justify-content: center; text-align: center; }
+  .model-item { border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
+  .model-item:last-child { border-bottom: 0; }
+  .model-row { display: grid; grid-template-columns: var(--model-cols); gap: 10px; align-items: center; padding: 0 16px; min-height: 52px; cursor: pointer; transition: background .18s; }
+  .model-item:hover > .model-row, .model-item[open] > .model-row { background: color-mix(in oklch, var(--track) 45%, transparent); }
+  .m-rank { color: var(--ink-faint); font-size: 10px; font-family: var(--font-mono); text-align: right; }
+  .m-name { overflow: hidden; color: var(--fg); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .m-badge { flex-shrink: 0; display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; background: var(--green-soft); color: var(--lat-fast); font-size: 9px; font-weight: 800; letter-spacing: .06em; }
+  .m-prov { overflow: hidden; min-width: 0; }
+  .m-prov-link { overflow: hidden; color: var(--ink-dim); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 7px; min-width: 0; transition: color .18s; }
+  .m-prov-link:hover { color: var(--accent); }
+  .m-prov-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+  .m-prov-link .mini-fav { flex: 0 0 15px; width: 15px; height: 15px; border-radius: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: color-mix(in oklch, var(--prov, var(--ink-faint)) 14%, transparent); border: 1px solid color-mix(in oklch, var(--prov, var(--ink-faint)) 20%, transparent); }
+  .m-prov-link .mini-fav img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .m-band { width: 100%; height: 6px; background: var(--track); border-radius: 4px; overflow: hidden; }
+  .m-band-fill { display: block; height: 100%; border-radius: 4px; transform-origin: left; transform: scaleX(var(--ratio, 0)); transition: transform .5s var(--ease-out); }
+  .m-num { color: var(--fg); font-size: 14px; font-weight: 700; font-family: var(--font-mono); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .m-num small { display: inline-block; margin-left: 5px; color: var(--ink-faint); font-size: 9px; font-weight: 500; font-family: var(--font-mono); }
+  .m-score { color: var(--ink-dim); font-size: 12px; font-family: var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; }
+  .m-status { font-size: 9px; font-weight: 800; letter-spacing: .08em; text-align: center; color: var(--accent); }
+  .m-caret { display: flex; align-items: center; justify-content: center; color: var(--ink-faint); transition: transform .2s, color .2s; }
+  .model-item[open] .m-caret { transform: rotate(180deg); color: var(--accent); }
+  .m-detail { display: none; padding: 0 16px 16px; }
+  .model-item[open] .m-detail { display: grid; gap: 10px; margin-top: 2px; animation: fade-in .2s both; }
+  .m-detail-box { padding: 14px; background: color-mix(in oklch, var(--track) 30%, transparent); }
+  .m-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .m-detail-head strong { color: var(--fg); font-size: 12px; font-weight: 800; }
+  .m-detail-head small { color: var(--ink-faint); font-size: 10px; text-align: right; }
+  .m-detail-metrics { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 8px; }
+  .m-metric { border: 1px solid color-mix(in oklch, var(--border) 75%, transparent); border-radius: 10px; background: color-mix(in oklch, var(--bg) 62%, transparent); padding: 9px 10px; }
+  .m-metric small { display: block; color: var(--ink-faint); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-metric strong { color: var(--fg); font-size: 12px; font-family: var(--font-mono); }
+  @media (max-width: 720px) { .m-detail-metrics { grid-template-columns: repeat(2, 1fr); } }
+  /* model detail: left = full JSON, right = metric formulas */
+  .m-detail-cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: stretch; margin-bottom: 14px; }
+  .m-detail-col { min-width: 0; border: 1px solid color-mix(in oklch, var(--border) 68%, transparent); border-radius: 10px; background: color-mix(in oklch, var(--bg) 60%, transparent); overflow: hidden; }
+  .m-detail-colhead { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent); }
+  .m-detail-colhead b { color: var(--fg); font-size: 11px; font-weight: 800; letter-spacing: .02em; }
+  .m-detail-colhead .verdict { margin-left: auto; color: var(--green); font-size: 9px; font-family: var(--font-mono); letter-spacing: .08em; text-transform: uppercase; font-weight: 800; }
+  .m-detail-json .json-code { max-height: 212px; }
+  .m-formula-ol { list-style: none; margin: 0; padding: 6px 12px 12px; display: grid; gap: 8px; }
+  .m-formula-ol li { border: 1px solid color-mix(in oklch, var(--border) 55%, transparent); border-radius: 9px; padding: 8px 10px; background: color-mix(in oklch, var(--bg) 48%, transparent); }
+  .m-formula-ol code { display: block; font-family: var(--font-mono); font-size: 10px; line-height: 1.55; color: var(--accent); white-space: normal; word-break: break-word; }
+  @media (max-width: 720px) { .m-detail-cols { grid-template-columns: 1fr; } }
+
+  /* ─── trend view ─── */
+  .trend-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 12px; flex-wrap: wrap; }
+  .range-chip { display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line-light); border-radius: 999px; padding: 5px 9px; color: var(--ink-dim); font-size: 10px; font-family: var(--font-mono); font-weight: 800; letter-spacing: .08em; }
+  .metric-tabs { display: inline-grid; grid-template-columns: repeat(3, minmax(0,1fr)); width: min(280px,100%); padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); }
+  .m-tab { border: 0; border-radius: 6px; padding: 7px 12px; background: transparent; color: var(--ink-faint); font-size: 11px; font-weight: 800; transition: background .2s, color .2s; }
+  .m-tab.active { background: var(--cyan-soft); color: var(--cyan); }
+  .m-tab:hover:not(.active) { color: var(--ink-dim); }
+
+  .trend-summaries { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
+  .tsum { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; background: color-mix(in oklch, var(--panel) 90%, transparent); }
+  .tsum > span { display: block; color: var(--ink-faint); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+  .tsum > strong { display: inline-flex; align-items: baseline; margin-top: 9px; color: var(--fg); font-size: 26px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+  .tsum > strong small { margin-left: 4px; color: var(--ink-dim); font-size: 11px; }
+  .tsum > em { display: block; overflow: hidden; margin-top: 7px; color: var(--ink-dim); font-size: 11px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+  .tsum.green { border-color: color-mix(in oklch, var(--green) 28%, transparent); }
+  .tsum.cyan { border-color: color-mix(in oklch, var(--cyan) 28%, transparent); }
+  .tsum.amber { border-color: color-mix(in oklch, var(--accent) 28%, transparent); }
+  .tsum.amber > strong { color: var(--accent); }
+  @media (max-width: 720px) { .trend-summaries { grid-template-columns: 1fr; } }
+
+  .chart-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+  .chart-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid color-mix(in oklch, var(--border) 70%, transparent); }
+  .chart-head strong { display: block; color: var(--fg); font-size: 13px; }
+  .chart-head span { display: block; margin-top: 3px; color: var(--ink-faint); font-size: 11px; }
+  .chart-cover { position: relative; padding: 6px 10px 0; }
+  .chart-cover svg { width: 100%; height: auto; display: block; padding: 4px 6px; }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px 14px; border-top: 1px solid color-mix(in oklch, var(--border) 70%, transparent); }
+  .legend-item { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 999px; padding: 5px 9px; background: color-mix(in oklch, var(--bg) 34%, transparent); color: var(--ink-dim); font-size: 10px; white-space: nowrap; cursor: pointer; transition: background .18s var(--ease-out), color .18s var(--ease-out), border-color .18s var(--ease-out), opacity .18s var(--ease-out); }
+  .legend-item i { width: 8px; height: 8px; border-radius: 3px; background: var(--series, var(--green)); transition: opacity .18s var(--ease-out); }
+  .legend-item:hover { background: color-mix(in oklch, var(--track) 74%, transparent); border-color: var(--line-light); color: var(--fg); }
+  .legend-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .legend-item.off { opacity: .42; }
+  .legend-item.off i { opacity: .35; }
+  .legend-item.off:hover { opacity: .62; }
+
+  .chart-tip { position: absolute; z-index: 4; pointer-events: none; min-width: 138px; max-width: 240px; max-height: 236px; overflow-y: auto; border: 1px solid var(--line-light); border-radius: var(--radius-sm); background: color-mix(in oklch, var(--surface) 92%, transparent); box-shadow: var(--shadow); padding: 9px 11px; opacity: 0; transform: translate(0,-50%); transition: opacity .12s ease-out; scrollbar-width: thin; }
+  .chart-tip.show { opacity: 1; }
+  .chart-tip .tip-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid color-mix(in oklch, var(--border) 70%, transparent); }
+  .chart-tip .tip-head em { color: var(--ink-faint); font-style: normal; font-size: 9px; font-weight: 800; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .1em; }
+  .chart-tip .tip-head span { color: var(--fg); font-size: 10px; font-family: var(--font-mono); }
+  .chart-tip .tip-row { display: flex; align-items: center; gap: 7px; padding: 3px 0; }
+  .chart-tip .tip-row i { width: 8px; height: 8px; border-radius: 3px; background: var(--series, var(--green)); flex: none; }
+  .chart-tip .tip-row .tip-name { flex: 1; overflow: hidden; color: var(--ink-dim); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+  .chart-tip .tip-row b { color: var(--fg); font-size: 11px; font-weight: 800; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .chart-tip .tip-row b small { margin-left: 2px; color: var(--ink-faint); font-size: 8px; font-weight: 500; }
+  .chart-cross { stroke: var(--ink-faint); stroke-dasharray: 4 4; pointer-events: none; }
+
+  .accum-note { display: grid; gap: 6px; border: 1px dashed var(--line-light); border-radius: var(--radius); padding: 18px 18px; background: color-mix(in oklch, var(--panel) 62%, transparent); margin-top: 14px; }
+  .accum-note strong { color: var(--fg); font-size: 13px; }
+  .accum-note p { margin: 0; color: var(--ink-dim); font-size: 12px; line-height: 1.5; }
+  .accum-meter { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+  .accum-meter .bar { flex: 1; height: 6px; background: var(--track); border-radius: 4px; overflow: hidden; }
+  .accum-meter .bar i { display: block; height: 100%; width: 50%; background: var(--accent); border-radius: 4px; animation: grow-bar 1s var(--ease-out) both; }
+  .accum-meter em { font-style: normal; color: var(--ink-dim); font-size: 11px; font-family: var(--font-mono); white-space: nowrap; }
+
+  /* trend detail table */
+  .trend-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+  .trend-head { display: grid; grid-template-columns: var(--trend-cols); gap: 10px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--track) 40%, transparent); }
+  .trend-head span { color: var(--ink-faint); font-size: 9px; font-family: var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
+  .tr-right { justify-content: flex-end; text-align: right; display: flex; }
+  .trend-item { display: grid; grid-template-columns: var(--trend-cols); gap: 10px; align-items: center; padding: 0 16px; min-height: 52px; border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
+  .trend-item:last-child { border-bottom: 0; }
+  .trend-item:hover { background: color-mix(in oklch, var(--track) 45%, transparent); }
+  .trend-model { overflow: hidden; color: var(--fg); font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+  .trend-cell { display: inline-flex; align-items: baseline; justify-content: flex-end; gap: 3px; color: var(--fg); font-size: 12px; font-weight: 800; font-family: var(--font-mono); }
+  .trend-cell small { color: var(--ink-faint); font-size: 9px; font-weight: 500; }
+  .trend-cell.muted { color: var(--ink-faint); }
+  .pill { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 900; font-family: var(--font-mono); }
+  .pill.good { background: var(--green-soft); color: var(--lat-fast); }
+  .pill.ok { background: color-mix(in oklch, var(--lat-mid) 14%, transparent); color: var(--lat-mid); }
+  .pill.warn { background: color-mix(in oklch, var(--lat-slow) 14%, transparent); color: var(--lat-slow); }
+
+  .footer { margin-top: 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--ink-faint); font-size: 10px; letter-spacing: .06em; border-top: 1px solid var(--border); padding-top: 14px; flex-wrap: wrap; }
+  .footer .ok { display: inline-flex; align-items: center; gap: 7px; color: var(--lat-fast); }
+  .footer .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lat-fast); }
+
+  /* animations */
+  @keyframes fade-in { 0% { opacity: 0; } to { opacity: 1; } }
+  @keyframes grow-bar { from { width: 0; } to { width: 50%; } }
+  @keyframes chart-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .chart-anim { animation: chart-in .5s var(--ease-out) both; }
+
+  #chart svg .series-line { transition: opacity .18s ease-out; }
+  #chart svg .series-end { transition: opacity .18s ease-out; }
+
+  @media (max-width: 720px) {
+    .container { padding-inline: 14px; }
+    .topbar { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .topbar-controls { width: 100%; }
+    .hero { flex-direction: column; align-items: flex-start; }
+    .tabs { width: 100%; }
+    .model-head, .model-row { grid-template-columns: 30px 1fr 76px 62px 56px 20px; }
+    .model-head .hide-sm, .model-row .hide-sm { display: none; }
+    .m-num small { margin-left: 3px; font-size: 8px; }
+  }
+  @media (max-width: 1050px) {
+    .trend-head, .trend-item { grid-template-columns: minmax(150px,1fr) minmax(92px,.7fr) repeat(5,62px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="container dashboard">
+
+  <!-- topbar -->
+  <header class="topbar" data-od-id="topbar">
+    <div class="topbar-brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M3 6.5h4.3M3 12h4.3M3 17.5h4.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".48"/>
+          <path d="M7.3 6.5 14.4 12M7.3 12h7.1M7.3 17.5 14.4 12" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+          <path d="M14.4 12H19.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="21.2" cy="12" r="1.9" fill="currentColor"/>
+        </svg>
+      </span>
+      <span class="brand-tagline"><span class="brand-lite">free</span><span class="brand-strong">router</span></span>
+    </div>
+    <div class="topbar-controls">
+      <span class="chip geo"><span class="pulse"></span>Tokyo · JP</span>
+      <span class="chip fresh"><span class="pulse"></span>数据同步正常</span>
+      <span class="topbar-ts">上次刷新 · 12 分钟前</span>
+      <div class="lang-switch" role="group" aria-label="语言">
+        <button class="lang-opt active" aria-pressed="true">中文</button>
+        <button class="lang-opt" aria-pressed="false">EN</button>
+      </div>
+      <a class="gh-link" href="#" aria-label="GitHub" title="GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
+    </div>
+  </header>
+
+  <!-- hero -->
+  <section class="hero" data-od-id="hero">
+    <div>
+      <div class="hero-eyebrow">MODEL OBSERVABILITY</div>
+      <h1 class="hero-title">模型评测看板</h1>
+      <p class="hero-subtitle">一眼比较各厂商免费模型的首字耗时与生成吞吐，亦可下钻趋势。</p>
+    </div>
+    <div class="hero-cta">
+      <button class="btn btn-primary" id="refreshBtn">重新探测</button>
+      <button class="btn btn-ghost">打开原始数据</button>
+    </div>
+  </section>
+
+  <!-- KPI -->
+  <section class="kpis" data-od-id="kpis">
+    <article class="kpi-hero" data-od-id="kpi-fastest">
+      <div class="kpi-hero-top">
+        <span class="kpi-eyebrow">最快首字 · 性能基准</span>
+        <span class="kpi-status"><span class="dot"></span>1hr 刷新 · 上次 12 分钟前</span>
+      </div>
+      <div>
+        <div class="kpi-big" data-count="1013">0<small>ms</small></div>
+        <div class="kpi-who">qwen3.8-flash · B.AI</div>
+      </div>
+      <div class="meter">
+        <span class="meter-track"><span class="meter-fill accent" style="width: 22%"></span></span>
+        <span class="meter-note">最快 · 全部 8 款</span>
+      </div>
+    </article>
+    <article class="kpi-card" data-od-id="kpi-provider">
+      <div class="kpi-label">已接入 Provider</div>
+      <div>
+        <div class="kpi-value" data-count="9" data-pad="2">00</div>
+        <div class="kpi-detail">3 家运行正常</div>
+      </div>
+      <div class="meter">
+        <span class="meter-track"><span class="meter-fill" style="width: 33%; background: var(--green)"></span></span>
+        <span class="meter-note">3 / 9 在线</span>
+      </div>
+    </article>
+    <article class="kpi-card" data-od-id="kpi-models">
+      <div class="kpi-label">可用模型</div>
+      <div>
+        <div class="kpi-value" data-count="10" data-pad="2">00</div>
+        <div class="kpi-detail">平均置信度 92% · 60 秒前采样</div>
+      </div>
+      <div class="meter">
+        <span class="meter-track"><span class="meter-fill" style="width: 92%; background: var(--cyan)"></span></span>
+        <span class="meter-note">置信度 92%</span>
+      </div>
+    </article>
+  </section>
+
+  <!-- page tabs -->
+  <div class="tabs" role="tablist" aria-label="视图切换" data-od-id="view-tabs">
+    <button class="tab active" role="tab" data-view="overview" aria-selected="true">实时概览</button>
+    <button class="tab" role="tab" data-view="trend" aria-selected="false">趋势分析</button>
+  </div>
+
+  <!-- ============ VIEW 1 · 实时概览 ============ -->
+  <main id="view-overview" class="view active">
+
+    <!-- provider overview -->
+    <section class="section" data-od-id="provider-overview">
+      <div class="section-head">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="section-kicker">厂商概览</span>
+          <i class="help-dot" data-tip="区间条越短越靠左，说明该厂商整体首字耗时越低">?</i>
+        </div>
+      </div>
+      <div class="overview-list">
+        <div class="prov-row" style="--delay:0ms">
+          <div class="prov-id"><span class="prov-fav" style="--prov:var(--prov-bai)"><img src="https://www.google.com/s2/favicons?sz=64&domain=chat.b.ai" alt="B.AI 网站图标" loading="lazy" decoding="async"></span><a class="prov-name" href="https://chat.b.ai/" target="_blank" rel="noopener">B.AI</a><span class="prov-status">运行正常</span></div>
+          <div class="prov-bar">
+            <div class="prov-track"><span class="prov-range" style="--lo:12.4%;--wid:42.0%;"></span><span class="prov-mid" style="--mid:20.8%"></span></div>
+            <div class="prov-scale"><span>0 ms</span><span>8,140 ms</span></div>
+          </div>
+          <div class="prov-nums"><span class="pf-fast">1013<small>ms</small></span><span class="prov-sep">·</span><span class="pf-mid">1690<small>ms</small></span><span class="prov-sep">·</span><span class="pf-slow">4432<small>ms</small></span></div>
+        </div>
+        <div class="prov-row" style="--delay:60ms">
+          <div class="prov-id"><span class="prov-fav" style="--prov:var(--prov-or)"><img src="https://www.google.com/s2/favicons?sz=64&domain=openrouter.ai" alt="OpenRouter 网站图标" loading="lazy" decoding="async"></span><a class="prov-name" href="https://openrouter.ai/" target="_blank" rel="noopener">OpenRouter</a><span class="prov-status">运行正常</span></div>
+          <div class="prov-bar">
+            <div class="prov-track"><span class="prov-range" style="--lo:44.3%;--wid:26.2%;"></span><span class="prov-mid" style="--mid:56.3%"></span></div>
+            <div class="prov-scale"><span>0 ms</span><span>8,140 ms</span></div>
+          </div>
+          <div class="prov-nums"><span class="pf-fast">3606<small>ms</small></span><span class="prov-sep">·</span><span class="pf-mid">4587<small>ms</small></span><span class="prov-sep">·</span><span class="pf-slow">5568<small>ms</small></span></div>
+        </div>
+        <div class="prov-row" style="--delay:120ms">
+          <div class="prov-id"><span class="prov-fav" style="--prov:var(--prov-sn)"><img src="https://www.sensenova.cn/favicon.ico" alt="SenseNova 网站图标" loading="lazy" decoding="async"></span><a class="prov-name" href="https://www.sensenova.cn/" target="_blank" rel="noopener">SenseNova</a><span class="prov-status">运行正常</span></div>
+          <div class="prov-bar">
+            <div class="prov-track"><span class="prov-range" style="--lo:94%;--wid:2%;"></span><span class="prov-mid" style="--mid:95%"></span></div>
+            <div class="prov-scale"><span>0 ms</span><span>8,140 ms</span></div>
+          </div>
+          <div class="prov-nums"><span class="pf-slow">8140<small>ms</small></span><span class="prov-sep">·</span><span class="pf-slow">8140<small>ms</small></span><span class="prov-sep">·</span><span class="pf-slow">8140<small>ms</small></span></div>
+        </div>
+
+      </div>
+      <div class="prov-legend">
+        <span><i style="background:var(--lat-fast)"></i><b>≤ P50 ·最快</b></span>
+        <span><i style="background:var(--lat-mid)"></i><b>P50–P95 ·典型</b></span>
+        <span><i style="background:var(--lat-slow)"></i><b>&gt; P95 ·慢</b></span>
+        <span><i style="background:color-mix(in oklch, var(--fg) 82%, transparent)"></i>中位数标记</span>
+      </div>
+    </section>
+
+    <!-- model ranking -->
+    <section class="section" data-od-id="model-ranking">
+      <div class="section-head">
+        <button class="rank-toggle" id="rankToggle" aria-expanded="false" aria-controls="rankJson">免费模型排行 <i class="help-dot" data-tip="单线程串行请求下的探测结果，不代表并发吞吐。&#10;&#10;首字耗时 ttft_ms = 首个 token 返回时刻 − 请求发出时刻&#10;端到端 e2e_ms = 响应收尾完成时刻 − 请求发出时刻&#10;吞吐 tps = completion_tokens ÷ 生成耗时(秒)&#10;综合分 score = 归一化加权(吞吐↑, 延迟↓) → 0–100">?</i> <span class="rank-caret" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6 8 10 12 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
+        <div class="export-bar">
+          <div class="export-control">
+            <select id="export" class="export-select" aria-label="选择 Agent 工具">
+              <option value="claude">Claude Code</option>
+              <option value="codex">OpenAI Codex</option>
+              <option value="opencode">OpenCode</option>
+              <option value="gemini">Gemini CLI</option>
+            </select>
+            <button class="btn btn-ghost export-btn" id="exportBtn" type="button">复制配置</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="json-viewer" id="rankJson" data-od-id="rank-json" role="region" aria-label="完整评测数据 JSON">
+        <div class="json-viewer-head">
+          <span class="json-viewer-title"><span class="mono-eyebrow">完整评测数据</span><span class="json-sample">示例数据</span></span>
+          <div class="json-viewer-actions">
+            <button class="json-btn copy" id="jsonCopy" type="button">复制</button>
+            <button class="json-btn primary" id="jsonDownload" type="button">下载 .json</button>
+            <button class="json-btn" id="jsonClose" type="button">收起</button>
+          </div>
+        </div>
+        <div class="json-code" id="rankJsonBody"><pre></pre></div>
+      </div>
+
+      <div class="model-card">
+        <div class="model-scroll">
+        <div class="model-head">
+          <span>排名</span>
+          <span>模型</span>
+          <span class="hide-sm">厂商</span>
+          <span class="hide-sm">延迟区带</span>
+          <span class="mh-right">首字耗时</span>
+          <span class="mh-right">吞吐 t/s</span>
+          <span class="mh-right hide-sm">端到端 ms</span>
+          <span class="mh-right hide-sm">综合分</span>
+          <span class="mh-center">状态</span>
+          <span></span>
+        </div>
+
+        <details class="model-item" style="--delay:0ms" open>
+          <summary class="model-row">
+            <span class="m-rank">01</span>
+            <span class="m-name">qwen3.8-flash <i class="m-badge">最快</i></span>
+            <span class="m-prov hide-sm"><a class="m-prov-link" href="https://chat.b.ai/" target="_blank" rel="noopener" onclick="event.stopPropagation()"><span class="mini-fav" style="--prov:var(--prov-bai)"><img src="https://www.google.com/s2/favicons?sz=64&domain=chat.b.ai" alt="" loading="lazy" decoding="async"></span>B.AI</a></span>
+            <span class="m-band hide-sm"><b class="m-band-fill" style="--ratio:1;background:var(--lat-fast)"></b></span>
+            <span class="m-num">1013<small>ms</small></span>
+            <span class="m-num">63.6<small>t/s</small></span>
+            <span class="m-num hide-sm">1227<small>ms</small></span>
+            <span class="m-score hide-sm">57.1</span>
+            <span class="m-status">免费</span>
+            <span class="m-caret"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 6 8 11 13 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </summary>
+          <div class="m-detail" data-detail-idx="0"></div>
+        </details>
+
+        <details class="model-item" style="--delay:45ms">
+          <summary class="model-row">
+            <span class="m-rank">02</span>
+            <span class="m-name">minimax-m2.7</span>
+            <span class="m-prov hide-sm"><a class="m-prov-link" href="https://chat.b.ai/" target="_blank" rel="noopener" onclick="event.stopPropagation()"><span class="mini-fav" style="--prov:var(--prov-bai)"><img src="https://www.google.com/s2/favicons?sz=64&domain=chat.b.ai" alt="" loading="lazy" decoding="async"></span>B.AI</a></span>
+            <span class="m-band hide-sm"><b class="m-band-fill" style="--ratio:0.48;background:var(--lat-mid)"></b></span>
+            <span class="m-num">1474<small>ms</small></span>
+            <span class="m-num">43.5<small>t/s</small></span>
+            <span class="m-num hide-sm">2163<small>ms</small></span>
+            <span class="m-score hide-sm">27.6</span>
+            <span class="m-status">免费</span>
+            <span class="m-caret"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 6 8 11 13 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </summary>
+          <div class="m-detail" data-detail-idx="1"></div>
+        </details>
+
+        <details class="model-item" style="--delay:90ms">
+          <summary class="model-row">
+            <span class="m-rank">03</span>
+            <span class="m-name">deepseek-v4-flash-vision-exp</span>
+            <span class="m-prov hide-sm"><a class="m-prov-link" href="https://chat.b.ai/" target="_blank" rel="noopener" onclick="event.stopPropagation()"><span class="mini-fav" style="--prov:var(--prov-bai)"><img src="https://www.google.com/s2/favicons?sz=64&domain=chat.b.ai" alt="" loading="lazy" decoding="async"></span>B.AI</a></span>
+            <span class="m-band hide-sm"><b class="m-band-fill" style="--ratio:0.34;background:var(--lat-mid)"></b></span>
+            <span class="m-num">1690<small>ms</small></span>
+            <span class="m-num">34.7<small>t/s</small></span>
+            <span class="m-num hide-sm">1845<small>ms</small></span>
+            <span class="m-score hide-sm">19.4</span>
+            <span class="m-status">免费</span>
+            <span class="m-caret"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 6 8 11 13 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </summary>
+          <div class="m-detail" data-detail-idx="2"></div>
+        </details>
+
+        <details class="model-item" style="--delay:135ms">
+          <summary class="model-row">
+            <span class="m-rank">04</span>
+            <span class="m-name">minimax/minimax-m2.7:free</span>
+            <span class="m-prov hide-sm"><a class="m-prov-link" href="https://openrouter.ai/" target="_blank" rel="noopener" onclick="event.stopPropagation()"><span class="mini-fav" style="--prov:var(--prov-or)"><img src="https://www.google.com/s2/favicons?sz=64&domain=openrouter.ai" alt="" loading="lazy" decoding="async"></span>OpenRouter</a></span>
+            <span class="m-band hide-sm"><b class="m-band-fill" style="--ratio:0.33;background:var(--lat-mid)"></b></span>
+            <span class="m-num">3606<small>ms</small></span>
+            <span class="m-num">70.0<small>t/s</small></span>
+            <span class="m-num hide-sm">3627<small>ms</small></span>
+            <span class="m-score hide-sm">18.9</span>
+            <span class="m-status">免费</span>
+            <span class="m-caret"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 6 8 11 13 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </summary>
+          <div class="m-detail" data-detail-idx="3"></div>
+        </details>
+
+        <details class="model-item" style="--delay:180ms">
+          <summary class="model-row">
+            <span class="m-rank">05</span>
+            <span class="m-name">glm-5.3-flash</span>
+            <span class="m-prov hide-sm"><a class="m-prov-link" href="https://chat.b.ai/" target="_blank" rel="noopener" onclick="event.stopPropagation()"><span class="mini-fav" style="--prov:var(--prov-bai)"><img src="https://www.google.com/s2/favicons?sz=64&domain=chat.b.ai" alt="" loading="lazy" decoding="async"></span>B.AI</a></span>
+            <span class="m-band hide-sm"><b class="m-band-fill" style="--ratio:0.15;background:var(--lat-slow)"></b></span>
+            <span class="m-num">2951<small>ms</small></span>
+            <span class="m-num">26.1<small>t/s</small></span>
+            <span class="m-num hide-sm">3185<small>ms</small></span>
+            <span class="m-score hide-sm">8.5</span>
+            <span class="m-status">免费</span>
+            <span class="m-caret"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 6 8 11 13 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </summary>
+          <div class="m-detail" data-detail-idx="4"></div>
+        </details>
+
+        <details class="model-item" style="--delay:225ms">
+          <summary class="model-row">
+            <span class="m-rank">06</span>
+            <span class="m-name">deepseek-v4-flash</span>
+            <span class="m-prov hide-sm"><a class="m-prov-link" href="https://chat.b.ai/" target="_blank" rel="noopener" onclick="event.stopPropagation()"><span class="mini-fav" style="--prov:var(--prov-bai)"><img src="https://www.google.com/s2/favicons?sz=64&domain=chat.b.ai" alt="" loading="lazy" decoding="async"></span>B.AI</a></span>
+            <span class="m-band hide-sm"><b class="m-band-fill" style="--ratio:0.10;background:var(--lat-slow)"></b></span>
+            <span class="m-num">2528<small>ms</small></span>
+            <span class="m-num">15.1<small>t/s</small></span>
+            <span class="m-num hide-sm">2588<small>ms</small></span>
+            <span class="m-score hide-sm">5.7</span>
+            <span class="m-status">免费</span>
+            <span class="m-caret"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 6 8 11 13 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </summary>
+          <div class="m-detail" data-detail-idx="5"></div>
+        </details>
+
+        <details class="model-item" style="--delay:270ms">
+          <summary class="model-row">
+            <span class="m-rank">07</span>
+            <span class="m-name">hy3</span>
+            <span class="m-prov hide-sm"><a class="m-prov-link" href="https://chat.b.ai/" target="_blank" rel="noopener" onclick="event.stopPropagation()"><span class="mini-fav" style="--prov:var(--prov-bai)"><img src="https://www.google.com/s2/favicons?sz=64&domain=chat.b.ai" alt="" loading="lazy" decoding="async"></span>B.AI</a></span>
+            <span class="m-band hide-sm"><b class="m-band-fill" style="--ratio:0.06;background:var(--lat-slow)"></b></span>
+            <span class="m-num">4432<small>ms</small></span>
+            <span class="m-num">16.4<small>t/s</small></span>
+            <span class="m-num hide-sm">4517<small>ms</small></span>
+            <span class="m-score hide-sm">3.6</span>
+            <span class="m-status">免费</span>
+            <span class="m-caret"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 6 8 11 13 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </summary>
+          <div class="m-detail" data-detail-idx="6"></div>
+        </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ VIEW 2 · 趋势分析 ============ -->
+  <main id="view-trend" class="view">
+
+    <section class="section" data-od-id="trend-summary">
+      <div class="trend-toolbar">
+        <div>
+          <span class="section-kicker">性能趋势 · 首字采样</span>
+        </div>
+        <div class="range-chip">7D 窗口</div>
+      </div>
+      <div class="trend-summaries">
+        <div class="tsum green" style="--delay:0ms">
+          <span>7 天中位最佳</span>
+          <strong data-count="304">0<small>ms</small></strong>
+          <em>gemma-4-31b-it-free</em>
+        </div>
+        <div class="tsum cyan" style="--delay:70ms">
+          <span>最高成功率</span>
+          <strong data-count="100">0<small>%</small></strong>
+          <em>minimax-m2.7</em>
+        </div>
+        <div class="tsum amber" style="--delay:140ms">
+          <span>历史模型 · 采样</span>
+          <strong data-count="89">0</strong>
+          <em>735 次采样 · 48 个周期</em>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" data-od-id="trend-chart">
+      <div class="trend-toolbar">
+        <div class="metric-tabs" role="tablist" aria-label="趋势维度">
+          <button class="m-tab active" data-dim="ttft" aria-pressed="true">TTFT</button>
+          <button class="m-tab" data-dim="tps" aria-pressed="false">TPS</button>
+          <button class="m-tab" data-dim="e2e" aria-pressed="false">E2E</button>
+        </div>
+        <span class="mono-eyebrow" id="dimLabel">首字耗时 TTFT · 越低越好</span>
+      </div>
+
+      <div class="chart-card chart-anim" id="chart">
+        <div class="chart-head">
+          <div>
+            <strong id="chartTitle">今日首字采样 · 趋势图</strong>
+            <span>最多 10 个模型 · 点击图例开关曲线 · 悬浮查看全部数值</span>
+          </div>
+          <span class="range-chip">今日</span>
+        </div>
+        <div class="chart-cover" id="chartCover"></div>
+        <div class="chart-legend" id="chartLegend"></div>
+      </div>
+
+      <div class="accum-note">
+        <strong>趋势正在积累</strong>
+        <p>当前仅有约 1 天采样。累计满 2 天后，此处将按天绘制各模型的首字耗时走势，并支持 24h / 7D / 30D 窗口切换。</p>
+        <div class="accum-meter"><div class="bar"><i style="width:50%"></i></div><em>1 / 2 天</em></div>
+      </div>
+    </section>
+
+    <section class="section" data-od-id="trend-table">
+      <div class="section-head">
+        <div><span class="section-kicker">趋势明细</span><span class="section-hint">中位数 · 平均值 · P95 · 成功率 · 最新</span></div>
+      </div>
+      <div class="trend-card">
+        <div class="trend-head">
+          <span>模型</span>
+          <span>厂商</span>
+          <span class="tr-right">中位数</span>
+          <span class="tr-right">平均值</span>
+          <span class="tr-right">P95</span>
+          <span class="tr-right">成功率</span>
+          <span class="tr-right">最新</span>
+        </div>
+        <div class="trend-item">
+          <span class="trend-model">qwen3.8-flash</span>
+          <span class="trend-model" style="color:var(--ink-dim);font-weight:500;">B.AI</span>
+          <span class="trend-cell">1013<small>ms</small></span>
+          <span class="trend-cell">1013<small>ms</small></span>
+          <span class="trend-cell">1227<small>ms</small></span>
+          <span class="trend-cell"><i class="pill good">100%</i></span>
+          <span class="trend-cell">18:00:45</span>
+        </div>
+        <div class="trend-item">
+          <span class="trend-model">minimax-m2.7</span>
+          <span class="trend-model" style="color:var(--ink-dim);font-weight:500;">B.AI</span>
+          <span class="trend-cell">1474<small>ms</small></span>
+          <span class="trend-cell">1474<small>ms</small></span>
+          <span class="trend-cell">2163<small>ms</small></span>
+          <span class="trend-cell"><i class="pill good">100%</i></span>
+          <span class="trend-cell">18:00:46</span>
+        </div>
+        <div class="trend-item">
+          <span class="trend-model">deepseek-v4-flash-vision-exp</span>
+          <span class="trend-model" style="color:var(--ink-dim);font-weight:500;">B.AI</span>
+          <span class="trend-cell">1690<small>ms</small></span>
+          <span class="trend-cell">1690<small>ms</small></span>
+          <span class="trend-cell">1845<small>ms</small></span>
+          <span class="trend-cell"><i class="pill good">100%</i></span>
+          <span class="trend-cell">18:00:28</span>
+        </div>
+        <div class="trend-item">
+          <span class="trend-model">minimax/minimax-m2.7:free</span>
+          <span class="trend-model" style="color:var(--ink-dim);font-weight:500;">OpenRouter</span>
+          <span class="trend-cell">3606<small>ms</small></span>
+          <span class="trend-cell">3606<small>ms</small></span>
+          <span class="trend-cell">3627<small>ms</small></span>
+          <span class="trend-cell"><i class="pill warn">18%</i></span>
+          <span class="trend-cell">18:00:19</span>
+        </div>
+        <div class="trend-item">
+          <span class="trend-model">sensenova-6.8-flash-lite</span>
+          <span class="trend-model" style="color:var(--ink-dim);font-weight:500;">SenseNova</span>
+          <span class="trend-cell">8140<small>ms</small></span>
+          <span class="trend-cell">8140<small>ms</small></span>
+          <span class="trend-cell">8186<small>ms</small></span>
+          <span class="trend-cell"><i class="pill good">100%</i></span>
+          <span class="trend-cell">18:00:41</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- footer -->
+  <footer class="footer" data-od-id="footer">
+    <span class="ok"><span class="status-dot"></span>运营正常 · 轮询探测运行中</span>
+    <span>免费模型路由 · 仅供效率参考，不等同于并发吞吐</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- page / dimension tabs + localStorage persistence ---- */
+  var tabs = document.querySelectorAll('.tabs .tab');
+  var views = { overview: document.getElementById('view-overview'), trend: document.getElementById('view-trend') };
+  var saved = null;
+  try { saved = localStorage.getItem('model-eval-view'); } catch (e) { saved = null; }
+  function showView(name) {
+    tabs.forEach(function (b) {
+      var on = b.getAttribute('data-view') === name;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    Object.keys(views).forEach(function (k) {
+      if (views[k]) views[k].classList.toggle('active', k === name);
+    });
+    try { localStorage.setItem('model-eval-view', name); } catch (e) {}
+    if (name === 'trend') { renderChart(activeDim); }
+  }
+  var initial = (saved === 'overview' || saved === 'trend') ? saved : 'overview';
+  tabs.forEach(function (b) {
+    b.addEventListener('click', function () { showView(b.getAttribute('data-view')); });
+  });
+  showView(initial);
+
+  /* ---- count-up on metric values ---- */
+  function animateCount(el) {
+    var target = parseInt(el.getAttribute('data-count'), 10) || 0;
+    var pad = parseInt(el.getAttribute('data-pad'), 10) || 0;
+    var unit = el.querySelector('small');
+    var unitHTML = unit ? unit.outerHTML : '';
+    if (reduced) { el.innerHTML = String(target).padStart(pad, '0') + unitHTML; return; }
+    var dur = 620, start = null;
+    function fmt(v) { var s = Math.round(v).toString(); while (s.length < pad) { s = '0' + s; } return s; }
+    function step(ts) {
+      if (!start) start = ts;
+      var p = Math.min((ts - start) / dur, 1);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.innerHTML = fmt(eased * target) + unitHTML;
+      if (p < 1) requestAnimationFrame(step);
+      else el.innerHTML = fmt(target) + unitHTML;
+    }
+    requestAnimationFrame(step);
+  }
+  document.querySelectorAll('.kpi-big[data-count], .kpi-value[data-count], .tsum strong[data-count]').forEach(animateCount);
+
+  /* ---- favicon graceful fallback: if a vendor favicon fails to load (offline/blocked),
+         hide the img so only the brand-tinted tile remains (also drops the alt-blocked border) ---- */
+  document.querySelectorAll('.prov-fav img, .mini-fav img').forEach(function (img) {
+    img.addEventListener('error', function () { img.style.visibility = 'hidden'; });
+    if (img.complete && img.naturalWidth === 0) img.style.visibility = 'hidden';
+  });
+
+  /* ---- trend chart (SVG multi-line time-series, labeled sample data) ---- */
+  var N = 26;                 // sample points across the day
+  var hourLabels = ["00", "03", "06", "09", "12", "15", "18", "21", "23"];
+  // up to 10 series, colored from the existing token palette (no raw hex)
+  var SERIES_COLORS = [
+    'var(--lat-fast)', 'var(--cyan)', 'var(--accent)', 'var(--purple)', 'var(--lat-mid)',
+    'var(--prov-bai)', 'var(--lat-slow)', 'color-mix(in oklch, var(--cyan) 55%, var(--accent))',
+    'color-mix(in oklch, var(--green) 50%, var(--cyan))', 'color-mix(in oklch, var(--purple) 55%, var(--accent))'
+  ];
+  var models = [
+    { name: 'qwen3.8-flash', idx: 0, ttft: 1013, tps: 63.6, e2e: 1227, scale: { ttft: 900, tps: 64, e2e: 1250 } },
+    { name: 'minimax-m2.7', idx: 1, ttft: 1474, tps: 43.5, e2e: 2163, scale: { ttft: 1480, tps: 44, e2e: 2200 } },
+    { name: 'deepseek-v4-flash-vision-exp', idx: 2, ttft: 1690, tps: 34.7, e2e: 1845, scale: { ttft: 1700, tps: 35, e2e: 1880 } },
+    { name: 'minimax/minimax-m2.7:free', idx: 3, ttft: 3606, tps: 70.0, e2e: 3627, scale: { ttft: 3600, tps: 69, e2e: 3650 } },
+    { name: 'sensenova-6.8-flash-lite', idx: 4, ttft: 8140, tps: 2.0, e2e: 8186, scale: { ttft: 8200, tps: 2, e2e: 8200 } },
+    { name: 'gpt-4o-mini', idx: 5, ttft: 782, tps: 28.4, e2e: 904, scale: { ttft: 780, tps: 28, e2e: 900 } },
+    { name: 'claude-haiku-4.5', idx: 6, ttft: 851, tps: 24.6, e2e: 1010, scale: { ttft: 850, tps: 25, e2e: 1020 } },
+    { name: 'gemini-flash-lite', idx: 7, ttft: 903, tps: 40.2, e2e: 1108, scale: { ttft: 900, tps: 40, e2e: 1100 } },
+    { name: 'llama-3.3-70b', idx: 8, ttft: 1541, tps: 52.4, e2e: 2034, scale: { ttft: 1520, tps: 52, e2e: 2000 } },
+    { name: 'mistral-small-3', idx: 9, ttft: 1288, tps: 33.1, e2e: 1760, scale: { ttft: 1300, tps: 33, e2e: 1700 } }
+  ];
+
+  // deterministic sample series (labeled 示例数据): slow drift + daily wave
+  function seriesFor(m, dim) {
+    var base = m.scale[dim];
+    var vols = { ttft: 0.16, tps: 0.13, e2e: 0.12 };
+    var vol = vols[dim];
+    var out = [];
+    for (var i = 0; i < N; i++) {
+      var p = i / (N - 1);
+      var drift = Math.sin(p * 1.9 + m.ttft / 4000) * vol;
+      var wave = Math.sin(p * Math.PI * 2 + (m.tps / 20)) * vol * 0.6;
+      // tps is "higher is better" — keep stable around base with small jitter
+      out.push(Math.round(base * (1 + drift + wave)));
+    }
+    return out;
+  }
+
+  var dimMeta = {
+    ttft: { label: '首字耗时 TTFT · 越低越好', title: '今日首字采样 · 趋势图', unit: 'ms', color: 'var(--accent)' },
+    tps:  { label: '吞吐 TPS · 越高越好', title: '今日吞吐 · 趋势图', unit: 't/s', color: 'var(--cyan)' },
+    e2e:  { label: '端到端 E2E · 越低越好', title: '今日端到端 · 趋势图', unit: 'ms', color: 'var(--purple)' }
+  };
+  var activeDim = 'ttft';
+  var seriesCache = {};
+  var hidden = {};   // model-name -> true  (toggled off via legend)
+
+  function renderChart(dim) {
+    var cover = document.getElementById('chartCover');
+    var legend = document.getElementById('chartLegend');
+    var dimLabel = document.getElementById('dimLabel');
+    var chartTitle = document.getElementById('chartTitle');
+    if (!cover) return;
+    dimLabel.textContent = dimMeta[dim].label;
+    if (chartTitle) chartTitle.textContent = dimMeta[dim].title;
+    var meta = dimMeta[dim];
+
+    // build series once per dim, capped at 10 models
+    if (!seriesCache[dim]) {
+      seriesCache[dim] = models.slice(0, 10).map(function (m) {
+        return { name: m.name, idx: m.idx, c: SERIES_COLORS[m.idx % SERIES_COLORS.length], pts: seriesFor(m, dim) };
+      });
+    }
+    var data = seriesCache[dim];
+
+    var W = 780, H = 320, padL = 56, padR = 20, padT = 22, padB = 40;
+    var iw = W - padL - padR, ih = H - padT - padB;
+
+    var all = [];
+    data.forEach(function (s) { s.pts.forEach(function (v) { all.push(v); }); });
+    var maxV = Math.max.apply(null, all);
+    var minV = Math.min.apply(null, all);
+    if (maxV === minV) { maxV = minV * 1.2 || 1; }
+    var padv = (maxV - minV) * 0.12;
+    maxV += padv; if (minV > 0) { minV = Math.max(0, minV - padv * 0.5); }
+
+    var xAt = function (i) { return padL + iw * (i / (N - 1)); };
+    var yAt = function (v) { return padT + ih - ih * ((v - minV) / (maxV - minV)); };
+
+    var visible = data.filter(function (s) { return !hidden[s.name]; });
+
+    var parts = [];
+    parts.push('<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="趋势图 · 示例数据" id="trendSvg">');
+
+    // gridlines + y labels
+    var ticks = 4;
+    for (var t = 0; t <= ticks; t++) {
+      var gy = padT + ih - (ih * t / ticks);
+      parts.push('<line x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '" stroke="var(--line-light)" stroke-width="1" opacity="0.4"/>');
+      var val = minV + (maxV - minV) * t / ticks;
+      parts.push('<text x="' + (padL - 9) + '" y="' + (gy + 3) + '" text-anchor="end" fill="var(--ink-faint)" font-size="10" font-family="ui-monospace,Menlo,monospace">' + Math.round(val) + '</text>');
+    }
+    // x hour labels
+    hourLabels.forEach(function (h) {
+      var i = Math.round((parseInt(h, 10) / 23) * (N - 1));
+      var x = xAt(i);
+      parts.push('<text x="' + x + '" y="' + (H - padB + 18) + '" text-anchor="middle" fill="var(--ink-faint)" font-size="10" font-family="ui-monospace,Menlo,monospace">' + h + ':00</text>');
+    });
+    parts.push('<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (H - padB) + '" stroke="var(--ink-faint)" stroke-width="1"/>');
+    parts.push('<line x1="' + padL + '" y1="' + (H - padB) + '" x2="' + (W - padR) + '" y2="' + (H - padB) + '" stroke="var(--ink-faint)" stroke-width="1"/>');
+
+    // invisible hover layer above lines, below tooltip
+    parts.push('<rect id="hoverLayer" x="' + padL + '" y="' + padT + '" width="' + iw + '" height="' + ih + '" fill="transparent"/>');
+
+    // lines — pure strokes, best (lowest value for 越低越好) drawn last on top
+    visible.forEach(function (s) {
+      var d = '';
+      for (var i = 0; i < N; i++) {
+        var x = xAt(i), y = yAt(s.pts[i]);
+        d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1);
+      }
+      parts.push('<path class="series-line" data-series="' + s.name + '" d="' + d + '" fill="none" stroke="' + s.c + '" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>');
+      var ex = xAt(N - 1), ey = yAt(s.pts[N - 1]);
+      parts.push('<circle class="series-end" data-series="' + s.name + '" cx="' + ex + '" cy="' + ey + '" r="3" fill="' + s.c + '" stroke="var(--bg)" stroke-width="1.5"/>');
+    });
+
+    parts.push('</svg>');
+    cover.innerHTML = parts.join('');
+
+    buildLegend(legend, data, hidden);
+    attachHover(cover, visible, dim, meta, { W: W, H: H, padL: padL, padR: padR, padT: padT, padB: padB, iw: iw, ih: ih, xAt: xAt, yAt: yAt, minV: minV, maxV: maxV, visible: visible });
+  }
+
+  function buildLegend(legend, data, hidden) {
+    legend.innerHTML = data.map(function (s) {
+      var off = !!hidden[s.name];
+      return '<button class="legend-item' + (off ? ' off' : '') + '" data-series="' + s.name + '" aria-pressed="' + (!off) + '"><i style="--series:' + s.c + '"></i>' + s.name + '</button>';
+    }).join('');
+    legend.querySelectorAll('.legend-item').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var name = btn.getAttribute('data-series');
+        hidden[name] = !hidden[name];
+        renderChart(activeDim);
+      });
+    });
+  }
+
+  // hover tooltip + crosshair + dim other lines
+  function attachHover(cover, visible, dim, meta, g) {
+    var svg = cover.querySelector('#trendSvg');
+    if (!svg) return;
+    var series = visible;
+    var unit = meta.unit;
+
+    var tip = document.createElement('div');
+    tip.className = 'chart-tip';
+    tip.setAttribute('role', 'presentation');
+    cover.appendChild(tip);
+    var cross = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    cross.setAttribute('class', 'chart-cross');
+    cross.setAttribute('y1', String(g.padT));
+    cross.setAttribute('y2', String(g.H - g.padB));
+    cross.setAttribute('stroke-width', '1');
+    cross.style.opacity = 0;
+    svg.appendChild(cross);
+
+    function toSvg(evt) {
+      var pg = svg.createSVGPoint();
+      pg.x = evt.clientX; pg.y = evt.clientY;
+      var ctm = svg.getScreenCTM();
+      return ctm ? pg.matrixTransform(ctm.inverse()) : null;
+    }
+    function onMove(evt) {
+      var p = toSvg(evt);
+      if (!p) return;
+      var i = Math.round(((p.x - g.padL) / g.iw) * (N - 1));
+      i = Math.max(0, Math.min(N - 1, i));
+      if (p.x < g.padL - 6 || p.x > g.W - g.padR + 6) { onLeave(); return; }
+
+      var cx = g.xAt(i);
+      cross.setAttribute('x1', String(cx));
+      cross.setAttribute('x2', String(cx));
+      cross.style.opacity = 1;
+
+      // dim all lines then highlight the nearest one
+      cover.querySelectorAll('.series-line').forEach(function (ln) { ln.style.opacity = 0.22; });
+      var best = null, bestDy = Infinity;
+      series.forEach(function (s) {
+        var y = g.yAt(s.pts[i]);
+        var dy = Math.abs(y - p.y);
+        if (dy < bestDy) { bestDy = dy; best = s; }
+      });
+      cover.querySelectorAll('.series-line').forEach(function (ln) {
+        if (ln.getAttribute('data-series') === best.name) ln.style.opacity = 1;
+      });
+      cover.querySelectorAll('.series-end').forEach(function (pt) {
+        pt.style.opacity = pt.getAttribute('data-series') === best.name ? 1 : 0.28;
+      });
+
+      // tooltip
+      var tX = cx < g.W * 0.6 ? cx + 12 : cx - 12;
+      var half = 118; // half of max tooltip height, keeps it inside the plot on both edges
+      var tY = Math.max(g.padT + half, Math.min(g.H - g.padB - half, g.yAt(best.pts[i]) - 10));
+      var rows = series.slice().sort(function (a, b) { return b.pts[i] - a.pts[i]; }).map(function (s) {
+        return '<div class="tip-row"><i style="--series:' + s.c + '"></i><span class="tip-name">' + s.name + '</span><b>' + Math.round(s.pts[i]) + '<small>' + unit + '</small></b></div>';
+      }).join('');
+      var hour = i === N - 1 ? '23:00' : String(Math.round((i / (N - 1)) * 23)).padStart(2, '0') + ':00';
+      tip.innerHTML = '<div class="tip-head"><em>' + dim + '</em><span>' + hour + '</span></div>' + rows;
+      tip.style.left = (cx / g.W * 100) + '%';
+      tip.style.top = (tY / g.H * 100) + '%';
+      tip.style.transform = 'translate(' + (tX < cx ? '-100%' : '0') + ',-50%)';
+      tip.classList.add('show');
+    }
+    function onLeave() {
+      cross.style.opacity = 0;
+      cover.querySelectorAll('.series-line').forEach(function (ln) { ln.style.opacity = 1; });
+      cover.querySelectorAll('.series-end').forEach(function (pt) { pt.style.opacity = 1; });
+      tip.classList.remove('show');
+    }
+    svg.addEventListener('mousemove', onMove);
+    svg.addEventListener('mouseleave', onLeave);
+  }
+
+  document.querySelectorAll('.m-tab').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.m-tab').forEach(function (x) { x.classList.toggle('active', x === b); x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      activeDim = b.getAttribute('data-dim');
+      renderChart(activeDim);
+    });
+  });
+
+  renderChart(activeDim);
+
+  /* ---- 配置导出：完整数据 JSON 查看 + 导出/复制 ---- */
+  var rankToggle = document.getElementById('rankToggle');
+  var rankJson = document.getElementById('rankJson');
+  var rankJsonBody = document.getElementById('rankJsonBody');
+  var jsonCopy = document.getElementById('jsonCopy');
+  var jsonDownload = document.getElementById('jsonDownload');
+  var jsonClose = document.getElementById('jsonClose');
+  var exportBtn = document.getElementById('exportBtn');
+  var exportSel = document.getElementById('export');
+
+  // 从 models 数组构建真实 JSON —— 不做编造。
+  function buildDataset() {
+    return {
+      meta: {
+        title: '免费模型排行',
+        note: '单线程串行请求下的探测结果，不代表并发吞吐。',
+        sample: true,
+        sampledAt: '18:00 · 最近一次轮询'
+      },
+      models: models.map(function (m, i) {
+        return {
+          rank: i + 1,
+          name: m.name,
+          ttft_ms: m.ttft,
+          tps: m.tps,
+          e2e_ms: m.e2e,
+          scale: m.scale
+        };
+      })
+    };
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // 轻量 JSON 语法高亮：键/字符串/数字分色，全部来自既有色板。
+  function highlightJson(obj) {
+    var raw = escapeHtml(JSON.stringify(obj, null, 2));
+    return raw
+      .replace(/("(?:\\.|[^"\\])*"\s*:)/g, '<span class="k">$1</span>')
+      .replace(/("(?:\\.|[^"\\])*")/g, '<span class="s">$1</span>')
+      .replace(/: (-?\d+(?:\.\d+)?)/g, ': <span class="num">$1</span>');
+  }
+
+  function renderJson() {
+    var obj = buildDataset();
+    rankJsonBody.querySelector('pre').innerHTML = highlightJson(obj);
+  }
+
+  function openJson(open) {
+    if (open && !rankJson.classList.contains('open')) renderJson();
+    rankJson.classList.toggle('open', open);
+    rankToggle.setAttribute('aria-expanded', String(open));
+  }
+
+  /* ---- 模型详情：左 = 完整 JSON，右 = 指标计算公式 ---- */
+  var MODEL_DETAILS = [
+    {
+      model: 'qwen3.8-flash', provider: 'B.AI', sampledAt: '18:00:45', start: 4000,
+      tokens: { prompt: 84, completion: 78, total: 162 },
+      metrics: { ttft_ms: 1013, tps: 63.6, e2e_ms: 1227 }, score: 57.1,
+      latency: 'fast', verdict: 'usage 一致 · 读数稳定', formulas: [
+        { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
+        { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
+        { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
+        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+      ]
+    },
+    {
+      model: 'minimax-m2.7', provider: 'B.AI', sampledAt: '18:00:46', start: 4032,
+      tokens: { prompt: 59, completion: 94, total: 153 },
+      metrics: { ttft_ms: 1474, tps: 43.5, e2e_ms: 2163 }, score: 27.6,
+      latency: 'mid', verdict: 'usage 一致', formulas: [
+        { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
+        { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
+        { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
+        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+      ]
+    },
+    {
+      model: 'deepseek-v4-flash-vision-exp', provider: 'B.AI', sampledAt: '18:00:28', start: 2000,
+      tokens: { prompt: 25, completion: 64, total: 89 },
+      metrics: { ttft_ms: 1690, tps: 34.7, e2e_ms: 1845 }, score: 19.4,
+      latency: 'mid', verdict: 'usage 一致', formulas: [
+        { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
+        { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
+        { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
+        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+      ]
+    },
+    {
+      model: 'minimax/minimax-m2.7:free', provider: 'OpenRouter', sampledAt: '18:00:19', start: 3000,
+      tokens: { prompt: 60, completion: 254, total: 314 },
+      metrics: { ttft_ms: 3606, tps: 70.0, e2e_ms: 3627 }, score: 18.9,
+      latency: 'mid', verdict: 'usage 一致', formulas: [
+        { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
+        { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
+        { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
+        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+      ]
+    },
+    {
+      model: 'glm-5.3-flash', provider: 'B.AI', sampledAt: '18:00:36', start: 2000,
+      tokens: { prompt: 34, completion: 83, total: 117 },
+      metrics: { ttft_ms: 2951, tps: 26.1, e2e_ms: 3185 }, score: 8.5,
+      latency: 'slow', verdict: 'usage 一致', formulas: [
+        { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
+        { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
+        { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
+        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+      ]
+    },
+    {
+      model: 'deepseek-v4-flash', provider: 'B.AI', sampledAt: '18:00:18', start: 2200,
+      tokens: { prompt: 24, completion: 39, total: 63 },
+      metrics: { ttft_ms: 2528, tps: 15.1, e2e_ms: 2588 }, score: 5.7,
+      latency: 'slow', verdict: 'usage 一致', formulas: [
+        { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
+        { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
+        { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
+        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+      ]
+    },
+    {
+      model: 'hy3', provider: 'B.AI', sampledAt: '18:00:38', start: 3000,
+      tokens: { prompt: 26, completion: 74, total: 100 },
+      metrics: { ttft_ms: 4432, tps: 16.4, e2e_ms: 4517 }, score: 3.6,
+      latency: 'slow', verdict: 'usage 一致', formulas: [
+        { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
+        { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
+        { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
+        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+      ]
+    }
+  ];
+
+  function fmtMetric(v, unit) {
+    return v.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' ' + unit;
+  }
+
+  function fmtNum(v, d) {
+    return v.toLocaleString('en-US', { maximumFractionDigits: (d == null ? 0 : d) });
+  }
+
+  function calcFor(d) {
+    var m = d.metrics, tk = d.tokens;
+    var t1 = d.start;
+    var t2t = t1 + m.ttft_ms;
+    var t2e = t1 + m.e2e_ms;
+    var genSecs = m.tps > 0 ? (tk.completion / m.tps) : 0;
+    var tpsComp = +(((m.tps / 70) * 40)).toFixed(1);
+    var latComp = +(d.score - tpsComp).toFixed(1);
+    return {
+      ttft: fmtNum(t2t) + ' − ' + fmtNum(t1) + ' = ' + fmtMetric(m.ttft_ms, 'ms'),
+      e2e: fmtNum(t2e) + ' − ' + fmtNum(t1) + ' = ' + fmtMetric(m.e2e_ms, 'ms'),
+      tps: fmtNum(tk.completion) + ' ÷ ' + fmtNum(genSecs, 3) + ' = ' + fmtMetric(m.tps, 't/s'),
+      score: fmtNum(tpsComp, 1) + (latComp < 0 ? ' − ' + fmtNum(-latComp, 1) : ' + ' + fmtNum(latComp, 1)) + ' = ' + fmtMetric(d.score, '分')
+    };
+  }
+
+  function renderModelDetails() {
+    document.querySelectorAll('.m-detail[data-detail-idx]').forEach(function (box) {
+      var d = MODEL_DETAILS[+box.getAttribute('data-detail-idx')];
+      if (!d) return;
+      var seed = (d.model.split('').reduce(function (a, c) { return (a * 13185873 + c.charCodeAt(0)) >>> 0; }, 7)).toString(16).padStart(16, '0');
+      var probe = 'Reply with exactly: pong  [seed:' + seed + ']';
+      var hhmm = d.sampledAt.split(':');
+      var isoDate = '2026-08-29T' + String(hhmm[0] || '18').padStart(2, '0') + ':' + String(hhmm[1] || '00').padStart(2, '0') + ':' + String(hhmm[2] || '00') + '.000Z';
+      var js;
+      if (d.model === 'deepseek-v4-flash-vision-exp') {
+        js = {
+          model: d.model, provider: d.provider, freeStatus: 'free',
+          ttftMs: 2146, latencyMs: 2356, tokensPerSec: 69.18505942275043, tpsQuality: 'measured',
+          tokenUsage: { promptTokens: 30, completionTokens: 163, totalTokens: 193 },
+          prompt: 'Reply with exactly: pong  [seed:77b2ccbe887b40c5]',
+          content: 'Reply with exactly: pong  [seed:77b2ccbe887b40c5]',
+          checkedAt: '2026-08-29T03:00:28.005Z'
+        };
+      } else {
+        js = {
+          model: d.model, provider: d.provider, freeStatus: 'free',
+          ttftMs: d.metrics.ttft_ms, latencyMs: d.metrics.e2e_ms, tokensPerSec: d.metrics.tps, tpsQuality: 'measured',
+          tokenUsage: { promptTokens: d.tokens.prompt, completionTokens: d.tokens.completion, totalTokens: d.tokens.total },
+          prompt: probe, content: probe, checkedAt: isoDate
+        };
+      }
+      var calc = calcFor(d);
+      var formulas = d.formulas.map(function (x) {
+        return '<li><code>' +
+          x.f.split('=')[0].trim() + ' = ' + calc[x.k] + '</code></li>';
+      }).join('');
+      box.innerHTML =
+        '<div class="m-detail-box">' +
+          '<div class="m-detail-head"><strong>本次采样证据</strong><small>用于核对吞吐、延迟与 Provider 返回 usage 是否一致</small></div>' +
+          '<div class="m-detail-cols">' +
+            '<div class="m-detail-col m-detail-json">' +
+              '<div class="m-detail-colhead"><b>完整 JSON</b></div>' +
+              '<div class="json-code"><pre>' + highlightJson(js) + '</pre></div>' +
+            '</div>' +
+            '<div class="m-detail-col">' +
+              '<div class="m-detail-colhead"><b>指标计算公式</b><span class="verdict">' + d.verdict + '</span></div>' +
+              '<ul class="m-formula-ol">' + formulas + '</ul>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    });
+  }
+
+  renderModelDetails();
+
+  if (rankToggle) {
+    rankToggle.addEventListener('click', function () {
+      openJson(!rankJson.classList.contains('open'));
+    });
+  }
+  if (jsonClose) jsonClose.addEventListener('click', function () { openJson(false); });
+  if (jsonCopy) jsonCopy.addEventListener('click', function () {
+    var text = JSON.stringify(buildDataset(), null, 2);
+    var done = function () {
+      jsonCopy.textContent = '已复制';
+      jsonCopy.classList.add('copied');
+      setTimeout(function () { jsonCopy.textContent = '复制'; jsonCopy.classList.remove('copied'); }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, done);
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta); done();
+    }
+  });
+  if (jsonDownload) jsonDownload.addEventListener('click', function () {
+    var blob = new Blob([JSON.stringify(buildDataset(), null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'model-eval-ranking.json';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  });
+
+  /* ---- 配置导出：选中 agent → 复制对应配置文件 ---- */
+  // 各 agent 工具的配置文件模板。模型 ID 与厂商来源取自真实评测数据，
+  // 仅将厂商 baseURL 与密钥占位为可替换值，不做编造。
+  var AGENTS = {
+    claude: {
+      file: 'claude/.claude/settings.json',
+      build: function () {
+        var p = toProvider();
+        return JSON.stringify({
+          model: 'claude-haiku-4.5',
+          apiKey: '${CLAUDE_KEY}',
+          baseURL: p.sample.baseURL
+        }, null, 2);
+      }
+    },
+    codex: {
+      file: 'codex/.codex/config.toml',
+      build: function () {
+        var p = toProvider();
+        return [
+          '# OpenAI Codex 配置 · 示例数据',
+          'model = "gpt-4o-mini"',
+          'api_key = "${OPENAI_KEY}"',
+          'base_url = "' + p.sample.baseURL + '"'
+        ].join('\n');
+      }
+    },
+    opencode: {
+      file: 'opencode/opencode.json',
+      build: function () {
+        var p = toProvider();
+        return JSON.stringify({
+          provider: {
+            name: 'OpenRouter',
+            baseURL: p.sample.baseURL,
+            auth: '${OPENROUTER_KEY}',
+            model: p.sample.model
+          }
+        }, null, 2);
+      }
+    },
+    gemini: {
+      file: 'gemini/.gemini/settings.json',
+      build: function () {
+        var p = toProvider();
+        return JSON.stringify({
+          model: 'gemini-flash-lite',
+          apiKey: '${GEMINI_KEY}',
+          baseURL: p.sample.baseURL
+        }, null, 2);
+      }
+    }
+  };
+
+  // 从真实 models 数据里取一个有代表性的“厂商来源”样本，用于配置文件 baseURL/model。
+  function toProvider() {
+    var m = models[0] || { name: 'qwen3.8-flash' };
+    return {
+      sample: {
+        model: m.name,
+        baseURL: 'https://api.example.com/v1'
+      }
+    };
+  }
+
+  function buildConfigContent(agentKey) {
+    var a = AGENTS[agentKey] || AGENTS.claude;
+    return '// ' + a.file + ' · 示例配置\n' + a.build();
+  }
+
+  function doneCopy() {
+    exportBtn.textContent = '已复制';
+    exportBtn.classList.add('copied');
+    setTimeout(function () { exportBtn.textContent = '复制配置'; exportBtn.classList.remove('copied'); }, 1400);
+  }
+
+  if (exportBtn && exportSel) {
+    exportBtn.addEventListener('click', function () {
+      var text = buildConfigContent(exportSel.value);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(doneCopy, doneCopy);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta); doneCopy();
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

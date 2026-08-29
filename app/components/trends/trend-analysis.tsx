@@ -1,9 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import type { CSSProperties } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import type { MessageKey } from '../../i18n'
 import { useI18n } from '../../i18n'
+import { useCountUp } from '@/lib/use-count-up'
 import type { ModelTrendStats, TrendMetricKey, TrendResponse, TrendSample } from '@/domain/trend'
 
 type TrendAnalysisProps = {
@@ -17,12 +18,40 @@ type MetricOption = {
   shortLabelKey: MessageKey
   unit: string
   lowerIsBetter: boolean
+  /** 指标维度说明（设计稿 dimLabel，如“首字耗时 TTFT · 越低越好”）。 */
+  dimLabelKey: MessageKey
+  /** 设计稿 chartTitle：随指标整体变化（L900-902 dimMeta.title）。 */
+  titleKey: MessageKey
 }
 
 const METRIC_OPTIONS: MetricOption[] = [
-  { key: 'ttftMs', labelKey: 'trend.metric.ttft', shortLabelKey: 'trend.metric.ttftShort', unit: 'ms', lowerIsBetter: true },
-  { key: 'tokensPerSec', labelKey: 'trend.metric.tps', shortLabelKey: 'trend.metric.tpsShort', unit: 't/s', lowerIsBetter: false },
-  { key: 'latencyMs', labelKey: 'trend.metric.e2e', shortLabelKey: 'trend.metric.e2eShort', unit: 'ms', lowerIsBetter: true },
+  {
+    key: 'ttftMs',
+    labelKey: 'trend.metric.ttft',
+    shortLabelKey: 'trend.metric.ttftShort',
+    unit: 'ms',
+    lowerIsBetter: true,
+    dimLabelKey: 'trend.dim.ttft',
+    titleKey: 'trend.chart.title.ttft',
+  },
+  {
+    key: 'tokensPerSec',
+    labelKey: 'trend.metric.tps',
+    shortLabelKey: 'trend.metric.tpsShort',
+    unit: 't/s',
+    lowerIsBetter: false,
+    dimLabelKey: 'trend.dim.tps',
+    titleKey: 'trend.chart.title.tps',
+  },
+  {
+    key: 'latencyMs',
+    labelKey: 'trend.metric.e2e',
+    shortLabelKey: 'trend.metric.e2eShort',
+    unit: 'ms',
+    lowerIsBetter: true,
+    dimLabelKey: 'trend.dim.e2e',
+    titleKey: 'trend.chart.title.e2e',
+  },
 ]
 
 function getMetricOption(metric: TrendMetricKey): MetricOption {
@@ -47,6 +76,18 @@ function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`
 }
 
+/** x 轴刻度标签：短窗口用 HH:00，长窗口用 MM-DD（设计稿 L953-958 的时间语义适配版）。 */
+function formatTickLabel(ts: number, rangeDays: number): string {
+  const d = new Date(ts)
+  if (rangeDays <= 1) return `${String(d.getHours()).padStart(2, '0')}:00`
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function formatClock(ts: number): string {
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 function compareMetricValues(a: number | null, b: number | null, lowerIsBetter: boolean): number {
   if (a == null && b == null) return 0
   if (a == null) return 1
@@ -63,6 +104,16 @@ function stabilityClass(successRate: number): string {
 export default function TrendAnalysis({ trends, providerColors }: TrendAnalysisProps) {
   const { t } = useI18n()
   const [metric, setMetric] = useState<TrendMetricKey>('ttftMs')
+  // 图例隐藏状态提升到此处：跨指标切换保留（设计稿 hidden 为模块级，不随 dim 重置）
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set())
+  const toggleModel = useCallback((key: string) => {
+    setHidden((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
   const option = getMetricOption(metric)
   const sampledDayCount = trends.bucketDates.length
   const canShowTrendCharts = sampledDayCount >= 2
@@ -112,20 +163,21 @@ export default function TrendAnalysis({ trends, providerColors }: TrendAnalysisP
       <div className="trend-metrics">
         <TrendSummaryCard
           label={t('trend.summary.bestMedian')}
-          value={topModel ? formatMetric(topModel.median[metric], metric) : '—'}
+          value={topModel ? topModel.median[metric] : null}
           unit={topModel ? option.unit : ''}
           detail={topModel ? topModel.modelId : '—'}
           tone="green"
         />
         <TrendSummaryCard
           label={t('trend.summary.stability')}
-          value={mostStableModel ? formatPercent(mostStableModel.successRate) : '—'}
+          value={mostStableModel ? Math.round(mostStableModel.successRate * 100) : null}
+          unit={mostStableModel ? '%' : ''}
           detail={mostStableModel ? mostStableModel.modelId : '—'}
           tone="cyan"
         />
         <TrendSummaryCard
           label={t('trend.summary.models')}
-          value={String(trends.modelStats.length)}
+          value={trends.modelStats.length}
           detail={t('trend.summary.samples', { count: trends.samples.length })}
           tone="amber"
         />
@@ -145,29 +197,31 @@ export default function TrendAnalysis({ trends, providerColors }: TrendAnalysisP
             </button>
           ))}
         </div>
-        <span className="trend-hint">
-          {option.lowerIsBetter ? t('trend.lowerBetter') : t('trend.higherBetter')}
-        </span>
+        <span className="trend-hint">{t(option.dimLabelKey)}</span>
       </div>
 
       {canShowTrendCharts ? (
         <TrendChart
-          title={t('trend.chart.allModels')}
+          title={t(option.titleKey)}
           subtitle={t('trend.chart.allModelsSub')}
           samples={trends.samples}
           models={rankedModels}
           metric={metric}
           providerColors={providerColors}
+          hidden={hidden}
+          onToggleModel={toggleModel}
+          rangeDays={trends.rangeDays}
           globalScale
         />
       ) : (
         <div className="trend-pending">
           <strong>{t('trend.pending.title')}</strong>
           <span>{t('trend.pending.desc', { count: sampledDayCount })}</span>
+          <AccumMeter days={sampledDayCount} />
         </div>
       )}
 
-      <TrendStatsTable models={rankedModels} metric={metric} option={option} />
+      <TrendStatsTable key={metric} models={rankedModels} metric={metric} option={option} />
 
       <section className="provider-trend-section">
         <div className="section-header">
@@ -196,17 +250,21 @@ export default function TrendAnalysis({ trends, providerColors }: TrendAnalysisP
               </summary>
               {canShowTrendCharts ? (
                 <TrendChart
-                  title={provider.providerName}
+                  title={`${provider.providerName} · ${t(option.labelKey)}`}
                   subtitle={t('trend.chart.providerSub')}
                   samples={trends.samples.filter((sample) => sample.providerId === provider.providerId)}
                   models={provider.models}
                   metric={metric}
                   providerColors={providerColors}
+                  hidden={hidden}
+                  onToggleModel={toggleModel}
+                  rangeDays={trends.rangeDays}
                 />
               ) : (
                 <div className="trend-pending provider-pending">
                   <strong>{t('trend.pending.title')}</strong>
                   <span>{t('trend.pending.desc', { count: sampledDayCount })}</span>
+                  <AccumMeter days={sampledDayCount} />
                 </div>
               )}
             </details>
@@ -219,17 +277,31 @@ export default function TrendAnalysis({ trends, providerColors }: TrendAnalysisP
 
 function TrendSummaryCard({ label, value, unit, detail, tone }: {
   label: string
-  value: string
+  value: number | null
   unit?: string
   detail: string
   tone: 'green' | 'cyan' | 'amber'
 }) {
+  // 设计稿 tsum strong[data-count]：整数值滚动动画（formatCount 无千分位）
+  const display = useCountUp(value ?? 0)
   return (
     <article className={`trend-summary ${tone}`}>
       <span>{label}</span>
-      <strong>{value}{unit ? <small>{unit}</small> : null}</strong>
+      <strong>{value == null ? '—' : display}{unit ? <small>{unit}</small> : null}</strong>
       <em>{detail}</em>
     </article>
+  )
+}
+
+/** 趋势积累进度条（设计稿 L729-733、L331-334 的 accum-meter）。 */
+function AccumMeter({ days }: { days: number }) {
+  const { t } = useI18n()
+  const pct = Math.max(0, Math.min(100, (days / 2) * 100))
+  return (
+    <div className="accum-meter">
+      <div className="bar"><i style={{ width: `${pct}%` }} /></div>
+      <em>{t('trend.accum.days', { count: days })}</em>
+    </div>
   )
 }
 
@@ -279,69 +351,189 @@ function MetricCell({ value, metric, unit, muted = false }: {
   )
 }
 
-function TrendChart({ title, subtitle, samples, models, metric, providerColors, globalScale = false }: {
+type ChartPoint = { t: number; v: number }
+
+type ChartSeries = {
+  key: string
+  model: ModelTrendStats
+  color: string
+  pts: ChartPoint[]
+  valueByTime: Map<number, number>
+  failures: TrendSample[]
+}
+
+/* 图表渲染参数对齐设计稿 L926：viewBox 780×320，padL=56 / padR=20 / padT=22 / padB=40 */
+const CHART_W = 780
+const CHART_H = 320
+const CHART_PAD = { top: 22, right: 20, bottom: 40, left: 56 }
+
+function TrendChart({ title, subtitle, samples, models, metric, providerColors, hidden, onToggleModel, rangeDays, globalScale = false }: {
   title: string
   subtitle: string
   samples: TrendSample[]
   models: ModelTrendStats[]
   metric: TrendMetricKey
   providerColors: Record<string, string>
+  hidden: Set<string>
+  onToggleModel: (key: string) => void
+  rangeDays: number
   globalScale?: boolean
 }) {
   const { t } = useI18n()
-  const [hidden, setHidden] = useState<Set<string>>(new Set())
-  const width = 900
-  const height = 280
-  const pad = { top: 22, right: 22, bottom: 34, left: 48 }
-  const visibleModels = models.filter((model) => !hidden.has(modelKey(model)))
-  const visibleKeys = new Set(visibleModels.map(modelKey))
-  const visibleSamples = samples.filter((sample) => visibleKeys.has(sampleKey(sample)))
-  const validSamples = visibleSamples.filter((sample) => typeof sample[metric] === 'number')
-  const values = validSamples.map((sample) => sample[metric]).filter((value): value is number => typeof value === 'number')
-  const times = visibleSamples.map((sample) => new Date(sample.checkedAt).getTime()).filter(Number.isFinite)
-  const minTime = times.length ? Math.min(...times) : Date.now()
-  const maxTime = times.length ? Math.max(...times) : minTime + 60 * 60 * 1000
-  const maxValue = values.length ? Math.max(...values) : 1
-  const minValue = globalScale ? 0 : Math.min(0, ...values)
-  const yMax = Math.max(maxValue * 1.08, 1)
-  const xSpan = Math.max(maxTime - minTime, 1)
-  const ySpan = Math.max(yMax - minValue, 1)
-  const plotW = width - pad.left - pad.right
-  const plotH = height - pad.top - pad.bottom
+  const option = getMetricOption(metric)
+  const [hover, setHover] = useState<{ index: number; bestKey: string | null } | null>(null)
 
-  function x(checkedAt: string): number {
-    return pad.left + ((new Date(checkedAt).getTime() - minTime) / xSpan) * plotW
+  const series = useMemo<ChartSeries[]>(() => {
+    return models.map((model) => {
+      const key = modelKey(model)
+      const modelSamples = samples.filter((sample) => sampleKey(sample) === key)
+      const pts: ChartPoint[] = []
+      const valueByTime = new Map<number, number>()
+      for (const sample of modelSamples) {
+        const value = sample[metric]
+        const time = new Date(sample.checkedAt).getTime()
+        if (typeof value === 'number' && Number.isFinite(value) && Number.isFinite(time)) {
+          pts.push({ t: time, v: value })
+          valueByTime.set(time, value)
+        }
+      }
+      pts.sort((a, b) => a.t - b.t)
+      return {
+        key,
+        model,
+        color: providerColors[model.providerId] ?? '#5FB8CE',
+        pts,
+        valueByTime,
+        failures: modelSamples.filter((sample) => sample.status !== 'ok'),
+      }
+    })
+  }, [models, samples, metric, providerColors])
+
+  const visibleSeries = useMemo(() => series.filter((item) => !hidden.has(item.key)), [series, hidden])
+
+  // 吸附/刻度用的采样时刻集合（可见曲线）
+  const times = useMemo(() => {
+    const set = new Set<number>()
+    for (const item of visibleSeries) for (const point of item.pts) set.add(point.t)
+    return Array.from(set).sort((a, b) => a - b)
+  }, [visibleSeries])
+
+  // Y 轴按全部数据（含隐藏曲线）计算，min/max ± 12% padding、不从 0 起（设计稿 L930-938）
+  const { minV, maxV } = useMemo(() => {
+    let mn = Infinity
+    let mx = -Infinity
+    for (const item of series) {
+      for (const point of item.pts) {
+        if (point.v < mn) mn = point.v
+        if (point.v > mx) mx = point.v
+      }
+    }
+    if (!Number.isFinite(mn) || !Number.isFinite(mx)) return { minV: 0, maxV: 1 }
+    if (mx === mn) mx = mn * 1.2 || 1
+    const padv = (mx - mn) * 0.12
+    const hi = mx + padv
+    const lo = mn > 0 ? Math.max(0, mn - padv * 0.5) : mn - padv
+    return { minV: lo, maxV: hi }
+  }, [series])
+
+  const plotW = CHART_W - CHART_PAD.left - CHART_PAD.right
+  const plotH = CHART_H - CHART_PAD.top - CHART_PAD.bottom
+  const minTime = times.length ? times[0] : Date.now()
+  const maxTime = times.length ? times[times.length - 1] : minTime + 60 * 60 * 1000
+  const xSpan = Math.max(maxTime - minTime, 1)
+  const ySpan = Math.max(maxV - minV, 1)
+
+  function x(time: number): number {
+    return CHART_PAD.left + ((time - minTime) / xSpan) * plotW
   }
 
   function y(value: number): number {
-    return pad.top + (1 - (value - minValue) / ySpan) * plotH
+    return CHART_PAD.top + (1 - (value - minV) / ySpan) * plotH
   }
 
-  function toggleModel(key: string) {
-    setHidden((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }
-
-  const series = visibleModels.map((model) => {
-    const key = modelKey(model)
-    const modelSamples = samples
-      .filter((sample) => sampleKey(sample) === key)
-      .sort((a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime())
-    const points = modelSamples
-      .filter((sample) => typeof sample[metric] === 'number')
-      .map((sample) => `${x(sample.checkedAt)},${y(sample[metric] as number)}`)
-    return {
-      key,
-      model,
-      color: providerColors[model.providerId] ?? '#5FB8CE',
-      path: points.length > 0 ? `M ${points.join(' L ')}` : '',
-      failures: modelSamples.filter((sample) => sample.status !== 'ok'),
+  // hover：吸附最近采样时刻 + 最近的曲线（设计稿 attachHover L1023-1062）
+  function handleMouseMove(event: ReactMouseEvent<SVGSVGElement>) {
+    if (times.length === 0) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+    const sx = ((event.clientX - rect.left) / rect.width) * CHART_W
+    const sy = ((event.clientY - rect.top) / rect.height) * CHART_H
+    if (sx < CHART_PAD.left - 6 || sx > CHART_W - CHART_PAD.right + 6) {
+      setHover(null)
+      return
     }
-  })
+    const timeAtX = minTime + ((sx - CHART_PAD.left) / plotW) * xSpan
+    let index = 0
+    let bestDt = Infinity
+    for (let i = 0; i < times.length; i += 1) {
+      const dt = Math.abs(times[i] - timeAtX)
+      if (dt < bestDt) {
+        bestDt = dt
+        index = i
+      }
+    }
+    const time = times[index]
+    let bestKey: string | null = null
+    let bestDy = Infinity
+    for (const item of visibleSeries) {
+      const value = item.valueByTime.get(time)
+      if (value == null) continue
+      const dy = Math.abs(y(value) - sy)
+      if (dy < bestDy) {
+        bestDy = dy
+        bestKey = item.key
+      }
+    }
+    setHover((prev) => (prev && prev.index === index && prev.bestKey === bestKey ? prev : { index, bestKey }))
+  }
+
+  // hidden 变化后 hover.index 可能越界，做边界防护
+  const hoverIndex = hover && hover.index < times.length ? hover.index : null
+  const hoverTime = hoverIndex == null ? null : times[hoverIndex]
+  const tipRows = useMemo(() => {
+    if (hoverTime == null) return []
+    return visibleSeries
+      .map((item) => ({ item, value: item.valueByTime.get(hoverTime) }))
+      .filter((row): row is { item: ChartSeries; value: number } => typeof row.value === 'number')
+      .sort((a, b) => b.value - a.value)
+  }, [visibleSeries, hoverTime])
+
+  const hoverBest = hoverTime != null ? tipRows.find((row) => row.item.key === hover?.bestKey) ?? null : null
+
+  function seriesLineOpacity(key: string): number {
+    if (hoverTime == null || !hover?.bestKey) return 1
+    return key === hover.bestKey ? 1 : 0.22
+  }
+
+  function seriesEndOpacity(key: string): number {
+    if (hoverTime == null || !hover?.bestKey) return 1
+    return key === hover.bestKey ? 1 : 0.28
+  }
+
+  // x 轴刻度：均匀取点，密度 5-9 个（设计稿 9 个 HH:00 标签的时间语义适配）
+  const tickIndices = useMemo(() => {
+    if (times.length === 0) return []
+    const wanted = Math.min(times.length, 9)
+    return Array.from(new Set(
+      Array.from({ length: wanted }, (_, k) => Math.round((k * (times.length - 1)) / Math.max(wanted - 1, 1))),
+    ))
+  }, [times])
+
+  let crossX: number | null = null
+  let crossY: number | null = null
+  let tipStyle: CSSProperties | undefined
+  if (hoverTime != null) {
+    crossX = x(hoverTime)
+    crossY = hoverBest ? y(hoverBest.value) - 10 : CHART_PAD.top + plotH / 2
+    const half = 118 // 设计稿 L1052：tooltip 半高，保证上下不越界
+    const clampedY = Math.max(CHART_PAD.top + half, Math.min(CHART_H - CHART_PAD.bottom - half, crossY))
+    tipStyle = {
+      left: `${(crossX / CHART_W) * 100}%`,
+      top: `${(clampedY / CHART_H) * 100}%`,
+      // 边界翻转：采样点偏右时 tooltip 翻到左侧（设计稿 L1051-1061）
+      transform: crossX < CHART_W * 0.6 ? 'translate(0, -50%)' : 'translate(-100%, -50%)',
+    }
+  }
 
   return (
     <div className="trend-chart-card">
@@ -353,48 +545,117 @@ function TrendChart({ title, subtitle, samples, models, metric, providerColors, 
         <span className="trend-chart-scale">{t(globalScale ? 'trend.scale.global' : 'trend.scale.local')}</span>
       </div>
       <div className="trend-chart-scroll">
-        <svg className="trend-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
-          <line x1={pad.left} y1={pad.top} x2={pad.left} y2={height - pad.bottom} className="chart-axis" />
-          <line x1={pad.left} y1={height - pad.bottom} x2={width - pad.right} y2={height - pad.bottom} className="chart-axis" />
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-            const gridY = pad.top + ratio * plotH
-            const labelValue = yMax - ratio * ySpan
-            return (
-              <g key={ratio}>
-                <line x1={pad.left} y1={gridY} x2={width - pad.right} y2={gridY} className="chart-grid" />
-                <text x={pad.left - 10} y={gridY + 4} className="chart-label" textAnchor="end">
-                  {formatMetric(labelValue, metric)}
-                </text>
-              </g>
-            )
-          })}
-          <text x={pad.left} y={height - 10} className="chart-label" textAnchor="start">
-            {new Date(minTime).toLocaleDateString()}
-          </text>
-          <text x={width - pad.right} y={height - 10} className="chart-label" textAnchor="end">
-            {new Date(maxTime).toLocaleDateString()}
-          </text>
-          {series.map((item) => (
-            <g key={item.key} className="chart-series">
-              {item.path ? (
-                <path d={item.path} fill="none" stroke={item.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <title>{item.model.modelId}</title>
-                </path>
-              ) : null}
-              {item.failures.map((sample) => (
-                <circle
-                  key={`${item.key}:${sample.checkedAt}:${sample.status}`}
-                  cx={x(sample.checkedAt)}
-                  cy={height - pad.bottom}
-                  r="3"
-                  className="chart-failure-dot"
-                >
-                  <title>{`${item.model.modelId} ${sample.status}`}</title>
-                </circle>
+        <div className="chart-cover">
+          <svg
+            className="trend-chart"
+            viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+            role="img"
+            aria-label={title}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => setHover(null)}
+          >
+            <line x1={CHART_PAD.left} y1={CHART_PAD.top} x2={CHART_PAD.left} y2={CHART_H - CHART_PAD.bottom} className="chart-axis" />
+            <line x1={CHART_PAD.left} y1={CHART_H - CHART_PAD.bottom} x2={CHART_W - CHART_PAD.right} y2={CHART_H - CHART_PAD.bottom} className="chart-axis" />
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+              const gridY = CHART_PAD.top + ratio * plotH
+              const labelValue = maxV - ratio * ySpan
+              return (
+                <g key={ratio}>
+                  <line x1={CHART_PAD.left} y1={gridY} x2={CHART_W - CHART_PAD.right} y2={gridY} className="chart-grid" />
+                  <text x={CHART_PAD.left - 9} y={gridY + 3} className="chart-label" textAnchor="end">
+                    {formatMetric(labelValue, metric)}
+                  </text>
+                </g>
+              )
+            })}
+            {tickIndices.map((index) => (
+              <text
+                key={times[index]}
+                x={x(times[index])}
+                y={CHART_H - CHART_PAD.bottom + 18}
+                className="chart-label"
+                textAnchor="middle"
+              >
+                {formatTickLabel(times[index], rangeDays)}
+              </text>
+            ))}
+            {visibleSeries.map((item) => {
+              const points = item.pts.map((point) => `${x(point.t).toFixed(1)},${y(point.v).toFixed(1)}`)
+              const last = item.pts[item.pts.length - 1]
+              return (
+                <g key={item.key} className="chart-series">
+                  {points.length > 0 ? (
+                    <path
+                      className="series-line"
+                      d={`M ${points.join(' L ')}`}
+                      fill="none"
+                      stroke={item.color}
+                      strokeWidth="2.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ opacity: seriesLineOpacity(item.key) }}
+                    >
+                      <title>{item.model.modelId}</title>
+                    </path>
+                  ) : null}
+                  {last ? (
+                    <circle
+                      className="series-end"
+                      cx={x(last.t)}
+                      cy={y(last.v)}
+                      r="3"
+                      fill={item.color}
+                      stroke="var(--bg)"
+                      strokeWidth="1.5"
+                      style={{ opacity: seriesEndOpacity(item.key) }}
+                    />
+                  ) : null}
+                  {item.failures.map((sample) => (
+                    <circle
+                      key={`${item.key}:${sample.checkedAt}:${sample.status}`}
+                      cx={x(new Date(sample.checkedAt).getTime())}
+                      cy={CHART_H - CHART_PAD.bottom}
+                      r="3"
+                      className="chart-failure-dot"
+                    >
+                      <title>{`${item.model.modelId} ${sample.status}`}</title>
+                    </circle>
+                  ))}
+                </g>
+              )
+            })}
+            {hoverTime != null && crossX != null ? (
+              <>
+                <line className="chart-cross" x1={crossX} y1={CHART_PAD.top} x2={crossX} y2={CHART_H - CHART_PAD.bottom} strokeWidth="1" />
+                {hoverBest ? (
+                  <line
+                    className="chart-cross"
+                    x1={CHART_PAD.left}
+                    y1={y(hoverBest.value)}
+                    x2={CHART_W - CHART_PAD.right}
+                    y2={y(hoverBest.value)}
+                    strokeWidth="1"
+                  />
+                ) : null}
+              </>
+            ) : null}
+          </svg>
+          {hoverTime != null && tipStyle ? (
+            <div className="chart-tip show" role="presentation" style={tipStyle}>
+              <div className="tip-head">
+                <em>{t(option.shortLabelKey)}</em>
+                <span>{formatClock(hoverTime)}</span>
+              </div>
+              {tipRows.map((row) => (
+                <div className="tip-row" key={row.item.key}>
+                  <i style={{ '--series': row.item.color } as CSSProperties} />
+                  <span className="tip-name">{row.item.model.modelId}</span>
+                  <b>{formatMetric(row.value, metric)}<small>{option.unit}</small></b>
+                </div>
               ))}
-            </g>
-          ))}
-        </svg>
+            </div>
+          ) : null}
+        </div>
       </div>
       <div className="trend-legend">
         {models.map((model) => {
@@ -405,7 +666,8 @@ function TrendChart({ title, subtitle, samples, models, metric, providerColors, 
               key={key}
               type="button"
               className={`trend-legend-item ${isHidden ? 'muted' : ''}`}
-              onClick={() => toggleModel(key)}
+              onClick={() => onToggleModel(key)}
+              aria-pressed={!isHidden}
               title={model.modelId}
             >
               <span style={{ '--series-color': providerColors[model.providerId] ?? '#5FB8CE' } as CSSProperties} />

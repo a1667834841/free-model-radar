@@ -5,6 +5,7 @@ export type {
   EvaluationMetrics,
   FlattenedModel,
   RankedModel,
+  TpsQuality,
 } from './types'
 export {
   estimateTokensFromContent,
@@ -16,3 +17,6 @@ export {
   getEvaluationMethod,
   listEvaluationMethods,
 } from './methods'
+export {
+  findFastestTtftModel,
+} from './summaries'

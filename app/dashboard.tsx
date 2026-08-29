@@ -1,15 +1,18 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import type { CSSProperties } from 'react'
 import { useI18n } from './i18n'
+import { useCountUp } from '@/lib/use-count-up'
+import { getProviderHomeUrl, getProviderIconUrl } from '@/lib/provider-icon'
+import { getTtftColor, getTtftTierClass } from '@/lib/ttft-tier'
 import RefreshButton from './refresh-button'
 import ModelEvaluation from './components/evaluation/model-evaluation'
 import TrendAnalysis from './components/trends/trend-analysis'
 import type { ProviderResult, ModelResult } from '@/domain/result'
 import type { TrendResponse } from '@/domain/trend'
 import {
-  DEFAULT_EVALUATION_METHOD_ID,
-  getEvaluationMethod,
+  findFastestTtftModel,
   resolveStreamingMetrics,
 } from '@/domain/evaluation'
 import type { RefreshStatus } from '@/domain/refresh'
@@ -24,22 +27,14 @@ type DashboardProps = {
   refreshStatus: RefreshStatus
   trends: TrendResponse
   isAdmin: boolean
-  nodeGeo: { city: string | null; country: string | null; region: string | null; ip: string | null }
+  nodeGeo: { city: string | null; country: string | null; region: string | null }
 }
 
 const PROVIDER_COLORS = ['#F0A35E', '#5FB8CE', '#A78BFA', '#E879A8', '#7FBF6A', '#D8C07A', '#62B8A0', '#E59A8C']
 
-const TTFT_TIER = [
-  { max: 500, color: '#3FCF8E', label: 'fast' },
-  { max: 1500, color: '#E8B44C', label: 'mid' },
-  { max: Infinity, color: '#E2625F', label: 'slow' },
-] as const
-
-function getTtftColor(ms: number): string {
-  for (const tier of TTFT_TIER) {
-    if (ms <= tier.max) return tier.color
-  }
-  return '#E2625F'
+/** 数字滚动展示（设计稿 .kpi-big[data-count] 行为）。 */
+function CountUpNumber({ value, pad = 0 }: { value: number; pad?: number }) {
+  return <>{useCountUp(value, pad)}</>
 }
 
 function formatRelative(iso: string, locale: 'zh' | 'en'): string {
@@ -53,9 +48,42 @@ function formatRelative(iso: string, locale: 'zh' | 'en'): string {
   return locale === 'zh' ? `${n} 小时前` : `${n} hr ago`
 }
 
-function getProviderHomeUrl(baseUrl?: string): string | null {
-  if (!baseUrl) return null
-  return baseUrl.replace(/\/+$/, '').replace(/\/v1$/i, '')
+function getDataHealth(refreshStatus: RefreshStatus, isStale: boolean): {
+  tone: 'fresh' | 'stale' | 'running' | 'failed'
+  labelKey: 'data.fresh' | 'data.stale' | 'data.refreshing' | 'data.failed'
+  footerKey: 'footer.operational' | 'footer.degraded' | 'footer.refreshing'
+  footerHelpKey: 'footer.operationalHelp' | 'footer.degradedHelp' | 'footer.refreshingHelp'
+} {
+  if (refreshStatus.status === 'running') {
+    return {
+      tone: 'running',
+      labelKey: 'data.refreshing',
+      footerKey: 'footer.refreshing',
+      footerHelpKey: 'footer.refreshingHelp',
+    }
+  }
+  if (refreshStatus.status === 'failed' || refreshStatus.error) {
+    return {
+      tone: 'failed',
+      labelKey: 'data.failed',
+      footerKey: 'footer.degraded',
+      footerHelpKey: 'footer.degradedHelp',
+    }
+  }
+  if (isStale) {
+    return {
+      tone: 'stale',
+      labelKey: 'data.stale',
+      footerKey: 'footer.degraded',
+      footerHelpKey: 'footer.degradedHelp',
+    }
+  }
+  return {
+    tone: 'fresh',
+    labelKey: 'data.fresh',
+    footerKey: 'footer.operational',
+    footerHelpKey: 'footer.operationalHelp',
+  }
 }
 
 export default function Dashboard({ providers, models, updatedAt, isStale, refreshStatus, trends, isAdmin, nodeGeo }: DashboardProps) {
@@ -63,13 +91,31 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
   const [pageView, setPageView] = useState<'overview' | 'trends'>('overview')
   const [modelView, setModelView] = useState<'ranking' | 'provider'>('ranking')
 
-  const evaluationMethod = getEvaluationMethod(DEFAULT_EVALUATION_METHOD_ID)
-  const rankedModels = useMemo(() => evaluationMethod.rank(models), [models, evaluationMethod])
-  const topModel = rankedModels[0] ?? null
+  // 视图选择持久化（设计稿 L810-831）：SSR 下只在 effect 内读 localStorage，首帧固定 overview
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('model-eval-view')
+      if (saved === 'overview' || saved === 'trends') setPageView(saved)
+    } catch { /* localStorage 不可用时忽略 */ }
+  }, [])
 
-  const { globalMinTtft, globalMaxTtft, providerOverview, providerColors } = useMemo(() => {
+  function switchPageView(view: 'overview' | 'trends') {
+    setPageView(view)
+    try { localStorage.setItem('model-eval-view', view) } catch { /* ignore */ }
+  }
+
+  const fastestTtftModel = useMemo(() => findFastestTtftModel(models), [models])
+  const fastestModel = useMemo(() => {
+    if (!fastestTtftModel) return null
+    return models.find((model) => {
+      return model.id === fastestTtftModel.id && resolveStreamingMetrics(model).ttftMs === fastestTtftModel.ttftMs
+    }) ?? null
+  }, [fastestTtftModel, models])
+  const dataHealth = getDataHealth(refreshStatus, isStale)
+  const healthyProviders = providers.filter((p) => p.status === 'healthy').length
+
+  const { globalMaxTtft, providerOverview, providerColors } = useMemo(() => {
     const ttftValues = models.map((m) => resolveStreamingMetrics(m).ttftMs)
-    const gMin = ttftValues.length ? Math.min(...ttftValues) : 0
     const gMax = ttftValues.length ? Math.max(...ttftValues) : 0
 
     const colors: Record<string, string> = {}
@@ -97,52 +143,58 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
         return a.name.localeCompare(b.name)
       })
 
-    return { globalMinTtft: gMin, globalMaxTtft: gMax, providerOverview: overview, providerColors: colors }
+    return { globalMaxTtft: gMax, providerOverview: overview, providerColors: colors }
   }, [providers, models])
 
-  const ttftRange = Math.max(globalMaxTtft - globalMinTtft, 1)
+  // prov-scale 以 0 为基准归一化（设计稿 L488：左端固定 0 ms）
+  const ttftScaleMax = Math.max(globalMaxTtft, 1)
+  const fastestMeterPct = fastestTtftModel && globalMaxTtft > 0
+    ? Math.max(8, Math.min(100, (fastestTtftModel.ttftMs / globalMaxTtft) * 100))
+    : 0
+  const providerHealthPct = providers.length > 0 ? (healthyProviders / providers.length) * 100 : 0
 
   return (
     <div className="dashboard">
       <header className="topbar">
         <div className="topbar-brand">
           <span className="brand-mark">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M6 8.6a6 6 0 0 1 12 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity=".55"/>
-              <path d="M8 9.3a4 4 0 0 1 8 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity=".28"/>
-              <text x="12" y="17" textAnchor="middle" fontSize="9" fontWeight="900" fill="currentColor" fontFamily="Inter, ui-sans-serif, system-ui, sans-serif">FM</text>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M3 6.5h4.3M3 12h4.3M3 17.5h4.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity=".48" />
+              <path d="M7.3 6.5 14.4 12M7.3 12h7.1M7.3 17.5 14.4 12" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+              <path d="M14.4 12H19.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <circle cx="21.2" cy="12" r="1.9" fill="currentColor" />
             </svg>
           </span>
-          <span className="brand-tagline">{t('brand.tagline')}</span>
+          <span className="brand-tagline"><span className="brand-lite">free</span><span className="brand-strong">router</span></span>
         </div>
         <div className="topbar-controls">
           {nodeGeo && (nodeGeo.city || nodeGeo.country) && (
-            <span className="geo-chip" title={t('node.edge')}>
-              <span className="geo-dot" />
+            <span className="chip geo" title={t('node.edge')}>
+              <span className="pulse" />
               {[nodeGeo.city, nodeGeo.country ? nodeGeo.country.toUpperCase() : null]
                 .filter(Boolean)
                 .join(' · ')}
             </span>
           )}
-          <span className={`status-chip ${isStale ? 'stale' : 'fresh'}`}>
-            <span className="status-dot" />
-            {isStale ? t('data.stale') : t('data.fresh')}
+          <span className={`chip ${dataHealth.tone}`}>
+            <span className="pulse" />
+            {t(dataHealth.labelKey)}
           </span>
           {updatedAt && (
             <span className="topbar-ts">
-              {t('data.lastRefresh')}：{formatRelative(updatedAt, locale)}
+              {t('data.lastRefresh')} · {formatRelative(updatedAt, locale)}
             </span>
           )}
-          <div className="language-switch" role="group" aria-label={t('lang.toggle')}>
+          <div className="lang-switch" role="group" aria-label={t('lang.toggle')}>
             <button
-              className={`language-option ${locale === 'zh' ? 'active' : ''}`}
+              className={`lang-opt ${locale === 'zh' ? 'active' : ''}`}
               onClick={() => setLocale('zh')}
               aria-pressed={locale === 'zh'}
             >
               中文
             </button>
             <button
-              className={`language-option ${locale === 'en' ? 'active' : ''}`}
+              className={`lang-opt ${locale === 'en' ? 'active' : ''}`}
               onClick={() => setLocale('en')}
               aria-pressed={locale === 'en'}
             >
@@ -150,7 +202,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
             </button>
           </div>
           <a
-            className="github-link"
+            className="gh-link"
             href="https://github.com/a1667834841/free-model-radar"
             target="_blank"
             rel="noreferrer"
@@ -161,7 +213,6 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
             </svg>
           </a>
-          {isAdmin ? <RefreshButton /> : null}
         </div>
       </header>
 
@@ -171,77 +222,104 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
           <h1 className="hero-title">{t('page.title')}</h1>
           <p className="hero-subtitle">{t('page.subtitle')}</p>
         </div>
+        <div className="hero-cta">
+          {isAdmin ? <RefreshButton /> : null}
+          <a className="btn btn-ghost" href="/api/results" target="_blank" rel="noreferrer">{t('page.rawData')}</a>
+        </div>
       </section>
 
-      <section className="metrics">
+      <section className="kpis">
+        <article className="kpi-hero">
+          <div className="kpi-hero-top">
+            <span className="kpi-eyebrow">{t('metric.fastestTtft')} · {t('metric.fastest')}</span>
+            <span className="kpi-status"><span className="dot" />1hr · {updatedAt ? formatRelative(updatedAt, locale) : '—'}</span>
+          </div>
+          <div>
+            <div className="kpi-big">{fastestTtftModel ? <CountUpNumber value={fastestTtftModel.ttftMs} /> : '--'}{fastestTtftModel ? <small>ms</small> : null}</div>
+            <div className="kpi-who">{fastestTtftModel ? `${fastestTtftModel.id}${fastestModel ? ` · ${fastestModel.providerName}` : ''}` : '—'}</div>
+          </div>
+          <div className="meter">
+            <span className="meter-track"><span className="meter-fill accent" style={{ width: `${fastestMeterPct}%` }} /></span>
+            <span className="meter-note">{t('badge.fastest')} · {models.length} {t('metric.models')}</span>
+          </div>
+        </article>
         <MetricCard
           label={t('metric.providers')}
-          value={String(providers.length).padStart(2, '0')}
-          detail={`${providers.filter((p) => p.status === 'healthy').length} ${t('status.healthy')}`}
-          accent="amber"
+          value={providers.length}
+          pad={2}
+          detail={`${healthyProviders} ${t('status.healthy')}`}
+          meter={`${healthyProviders} / ${providers.length || 0}`}
+          meterPct={providerHealthPct}
+          tone="green"
         />
         <MetricCard
           label={t('metric.models')}
-          value={String(models.length).padStart(2, '0')}
-          detail={t('data.lastRefresh') + (updatedAt ? `: ${formatRelative(updatedAt, locale)}` : '—')}
-          accent="cyan"
-        />
-        <MetricCard
-          label={t('metric.fastestTtft')}
-          value={topModel ? `${topModel.ttftMs ?? topModel.latencyMs}` : '--'}
-          unit={topModel ? 'ms' : ''}
-          detail={topModel ? topModel.id : '—'}
-          accent="green"
-        />
-        <MetricCard
-          label={t('metric.cycle')}
-          value="1"
-          unit="hr"
-          detail={t('metric.last', { time: updatedAt ? formatRelative(updatedAt, locale) : '—' })}
-          accent="purple"
+          value={models.length}
+          pad={2}
+          detail={t('data.lastRefresh') + (updatedAt ? ` · ${formatRelative(updatedAt, locale)}` : ' —')}
+          meter={updatedAt ? t('metric.last', { time: formatRelative(updatedAt, locale) }) : '—'}
+          meterPct={models.length > 0 ? 92 : 0}
+          tone="cyan"
         />
       </section>
 
-      <div className="page-tabs" role="tablist" aria-label={t('page.tabs')}>
+      <div className="tabs" role="tablist" aria-label={t('page.tabs')}>
         <button
           type="button"
-          className={`page-tab ${pageView === 'overview' ? 'active' : ''}`}
-          onClick={() => setPageView('overview')}
-          aria-pressed={pageView === 'overview'}
+          role="tab"
+          data-view="overview"
+          className={`tab ${pageView === 'overview' ? 'active' : ''}`}
+          onClick={() => switchPageView('overview')}
+          aria-selected={pageView === 'overview'}
         >
           {t('page.tab.overview')}
         </button>
         <button
           type="button"
-          className={`page-tab ${pageView === 'trends' ? 'active' : ''}`}
-          onClick={() => setPageView('trends')}
-          aria-pressed={pageView === 'trends'}
+          role="tab"
+          data-view="trends"
+          className={`tab ${pageView === 'trends' ? 'active' : ''}`}
+          onClick={() => switchPageView('trends')}
+          aria-selected={pageView === 'trends'}
         >
           {t('page.tab.trends')}
         </button>
       </div>
 
-      {pageView === 'overview' && providerOverview.length > 0 && (
-        <section className="overview-section">
-          <div className="section-header">
-            <div>
+      <div className={`view ${pageView === 'overview' ? 'active' : ''}`}>
+      {providerOverview.length > 0 && (
+        <section className="section overview-section">
+          <div className="section-head">
+            <div className="section-title-inline">
               <span className="section-kicker">{t('overview.title')}</span>
-              <span className="section-hint">{t('overview.sub')}</span>
+              <i className="help-dot" data-tip={t('overview.sub')}>?</i>
             </div>
           </div>
           <div className="overview-list">
-            {providerOverview.map((p) => {
+            {providerOverview.map((p, idx) => {
               const color = providerColors[p.id]
               const homeUrl = getProviderHomeUrl(p.baseUrl)
-              const leftPct = ttftRange > 0 && p.modelCount > 0 ? ((p.min - globalMinTtft) / ttftRange) * 100 : 0
-              const widthPct = ttftRange > 0 && p.modelCount > 0 ? ((p.max - p.min) / ttftRange) * 100 : 0
+              const faviconUrl = getProviderIconUrl(p, homeUrl)
+              const leftPct = p.modelCount > 0 ? (p.min / ttftScaleMax) * 100 : 0
+              const widthPct = p.modelCount > 0 ? ((p.max - p.min) / ttftScaleMax) * 100 : 0
+              const midPct = p.modelCount > 0 ? (p.median / ttftScaleMax) * 100 : 0
               return (
-                <div className="overview-row" key={p.id}>
-                  <div className="overview-provider">
-                    <span className="overview-dot" style={{ background: color }} />
+                <div className="prov-row" key={p.id} style={{ '--delay': `${Math.min(idx * 40, 320)}ms` } as CSSProperties}>
+                  <div className="prov-id">
+                    <span className="prov-fav" style={{ '--prov': color } as CSSProperties}>
+                      {faviconUrl ? (
+                        <img
+                          src={faviconUrl}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          onError={(event) => { event.currentTarget.style.visibility = 'hidden' }}
+                        />
+                      ) : null}
+                    </span>
                     {homeUrl ? (
                       <a
-                        className="overview-name overview-link"
+                        className="prov-name"
                         href={homeUrl}
                         target="_blank"
                         rel="noreferrer"
@@ -249,89 +327,99 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
                         {p.name}
                       </a>
                     ) : (
-                      <span className="overview-name">{p.name}</span>
+                      <span className="prov-name">{p.name}</span>
                     )}
-                    <span className={`overview-status ${p.status}`}>{t(`status.${p.status}` as any)}</span>
+                    <span className={`prov-status ${p.status}`}>{t(`status.${p.status}` as any)}</span>
                   </div>
-                  <div className="overview-bar-wrap">
-                    {p.modelCount > 0 ? (
-                      <span
-                        className="overview-bar-fill"
-                        style={{
-                          left: `${leftPct}%`,
-                          width: `${Math.max(widthPct, 2)}%`,
-                          background: widthPct > 8
-                            ? `linear-gradient(90deg, ${getTtftColor(p.min)}, ${getTtftColor(p.max)})`
-                            : getTtftColor(p.min),
-                        }}
-                      />
-                    ) : (
-                      <span className="overview-bar-empty" />
-                    )}
+                  <div className="prov-bar">
+                    <div className="prov-track">
+                      {p.modelCount > 0 ? (
+                        <>
+                          <span
+                            className="prov-range"
+                            style={{
+                              '--lo': `${leftPct}%`,
+                              '--wid': `${Math.max(widthPct, 2)}%`,
+                              background: widthPct > 8
+                                ? `linear-gradient(90deg, ${getTtftColor(p.min)}, ${getTtftColor(p.max)})`
+                                : getTtftColor(p.min),
+                            } as CSSProperties}
+                          />
+                          <span className="prov-mid" style={{ '--mid': `${midPct}%` } as CSSProperties} />
+                        </>
+                      ) : (
+                        <span className="prov-empty" />
+                      )}
+                    </div>
+                    <div className="prov-scale"><span>0 ms</span><span>{globalMaxTtft.toLocaleString()} ms</span></div>
                   </div>
-                  <div className="overview-nums">
+                  <div className="prov-nums">
                     {p.modelCount > 0 ? (
                       <>
-                        <span className="num-fast">{p.min}<small>ms</small></span>
-                        <span className="num-sep">·</span>
-                        <span className="num-mid">{p.median}<small>ms</small></span>
-                        <span className="num-sep">·</span>
-                        <span className="num-slow">{p.max}<small>ms</small></span>
+                        <span className={getTtftTierClass(p.min)}>{p.min.toLocaleString()}<small>ms</small></span>
+                        <span className="prov-sep">·</span>
+                        <span className={getTtftTierClass(p.median)}>{p.median.toLocaleString()}<small>ms</small></span>
+                        <span className="prov-sep">·</span>
+                        <span className={getTtftTierClass(p.max)}>{p.max.toLocaleString()}<small>ms</small></span>
                       </>
                     ) : (
-                      <span className="num-na">—</span>
+                      <span className="prov-na">—</span>
                     )}
                   </div>
                 </div>
               )
             })}
           </div>
+          <div className="prov-legend">
+            <span><i style={{ background: 'var(--lat-fast)' }} /><b>≤ P50</b></span>
+            <span><i style={{ background: 'var(--lat-mid)' }} /><b>P50-P95</b></span>
+            <span><i style={{ background: 'var(--lat-slow)' }} /><b>&gt; P95</b></span>
+            <span><i style={{ background: 'color-mix(in oklch, var(--fg) 82%, transparent)' }} />{t('overview.median')}</span>
+          </div>
         </section>
       )}
 
-      {pageView === 'overview' ? (
-        <>
-          <div className="view-toggle">
-            <button
-              type="button"
-              className={`view-btn ${modelView === 'ranking' ? 'active' : ''}`}
-              onClick={() => setModelView('ranking')}
-              aria-pressed={modelView === 'ranking'}
-            >
-              {t('view.ranking')}
-            </button>
-            <button
-              type="button"
-              className={`view-btn ${modelView === 'provider' ? 'active' : ''}`}
-              onClick={() => setModelView('provider')}
-              aria-pressed={modelView === 'provider'}
-            >
-              {t('view.provider')}
-            </button>
-          </div>
+      <div className="view-toggle">
+        <button
+          type="button"
+          className={`view-btn ${modelView === 'ranking' ? 'active' : ''}`}
+          onClick={() => setModelView('ranking')}
+          aria-pressed={modelView === 'ranking'}
+        >
+          {t('view.ranking')}
+        </button>
+        <button
+          type="button"
+          className={`view-btn ${modelView === 'provider' ? 'active' : ''}`}
+          onClick={() => setModelView('provider')}
+          aria-pressed={modelView === 'provider'}
+        >
+          {t('view.provider')}
+        </button>
+      </div>
 
-          <ModelEvaluation
-            models={models}
-            providers={providers}
-            view={modelView}
-            providerColors={providerColors}
-          />
-        </>
-      ) : (
+      <ModelEvaluation
+          models={models}
+          providers={providers}
+          view={modelView}
+          providerColors={providerColors}
+        />
+      </div>
+
+      <div className={`view ${pageView === 'trends' ? 'active' : ''}`}>
         <TrendAnalysis trends={trends} providerColors={providerColors} />
-      )}
+      </div>
 
       {refreshStatus.error && (
         <div className="error-banner">{t('error.banner', { error: refreshStatus.error })}</div>
       )}
 
       <footer className="footer">
-        <span className="footer-operational" title={t('footer.operationalHelp')}>
-          <span className="status-dot" /> {t('footer.operational')}
+        <span className={`footer-operational ${dataHealth.tone}`} title={t(dataHealth.footerHelpKey)}>
+          <span className="status-dot" /> {t(dataHealth.footerKey)}
         </span>
         <span className="footer-note">
           {t('footer.node')}
-          {nodeGeo.ip ? ` · ${nodeGeo.ip}` : ''}
           {[nodeGeo.city, nodeGeo.country].filter(Boolean).length > 0
             ? ` · ${[nodeGeo.city, nodeGeo.country].filter(Boolean).join(', ')}`
             : ''}
@@ -341,14 +429,21 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
   )
 }
 
-function MetricCard({ label, value, unit, detail, accent }: {
-  label: string; value: string; unit?: string; detail: string; accent: string
+function MetricCard({ label, value, pad = 0, unit, detail, meter, meterPct, tone }: {
+  label: string; value: number; pad?: number; unit?: string; detail: string; meter: string; meterPct: number; tone: 'green' | 'cyan'
 }) {
+  const display = useCountUp(value, pad)
   return (
-    <article className={`metric-card ${accent}`}>
-      <div className="metric-label">{label}</div>
-      <div className="metric-value">{value}{unit ? <small>{unit}</small> : null}</div>
-      <div className="metric-detail">{detail}</div>
+    <article className="kpi-card">
+      <div className="kpi-label">{label}</div>
+      <div>
+        <div className="kpi-value">{display}{unit ? <small>{unit}</small> : null}</div>
+        <div className="kpi-detail">{detail}</div>
+      </div>
+      <div className="meter">
+        <span className="meter-track"><span className="meter-fill" style={{ width: `${Math.max(0, Math.min(100, meterPct))}%`, background: `var(--${tone})` }} /></span>
+        <span className="meter-note">{meter}</span>
+      </div>
     </article>
   )
 }

@@ -51,9 +51,9 @@ const streamingPerformance: EvaluationMethod = {
   descriptionKey: 'eval.method.streaming.desc',
   noteKey: 'eval.note.singleThread',
   evaluate(model) {
-    const { ttftMs, tokensPerSec } = resolveStreamingMetrics(model)
-    const score = tokensPerSec != null ? computeStreamingScore(ttftMs, tokensPerSec) : null
-    return { ttftMs, tokensPerSec, score }
+    const { ttftMs, tokensPerSec, tpsQuality } = resolveStreamingMetrics(model)
+    const score = tokensPerSec != null && tpsQuality !== 'estimated' ? computeStreamingScore(ttftMs, tokensPerSec) : null
+    return { ttftMs, tokensPerSec, tpsQuality, score }
   },
   rank(models) {
     return assignRanks(models, this.evaluate.bind(this), (a, b) => {
@@ -74,7 +74,8 @@ const latencyOnly: EvaluationMethod = {
   labelKey: 'eval.method.latency',
   descriptionKey: 'eval.method.latency.desc',
   evaluate(model) {
-    return { ttftMs: model.ttftMs ?? model.latencyMs, tokensPerSec: model.tokensPerSec ?? null, score: null }
+    const { ttftMs, tokensPerSec, tpsQuality } = resolveStreamingMetrics(model)
+    return { ttftMs, tokensPerSec, tpsQuality, score: null }
   },
   rank(models) {
     return assignRanks(models, this.evaluate.bind(this), (a, b) => {

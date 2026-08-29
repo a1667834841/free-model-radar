@@ -1,16 +1,26 @@
 'use client'
 
 import type { CSSProperties } from 'react'
-import { useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  createColumnHelper,
+  tableFeatures,
+  useTable,
+  type Row,
+} from '@tanstack/react-table'
 import type { ProviderResult } from '@/domain/result'
 import {
   DEFAULT_EVALUATION_METHOD_ID,
   estimateTokensFromContent,
+  findFastestTtftModel,
   getEvaluationMethod,
   type FlattenedModel,
   type RankedModel,
 } from '@/domain/evaluation'
 import { AGENT_OPTIONS } from '@/domain/agent-config'
+import { highlightJson } from '@/lib/json-highlight'
+import { getProviderHomeUrl, getProviderIconUrl } from '@/lib/provider-icon'
+import { getTtftTierVar } from '@/lib/ttft-tier'
 import { useI18n } from '../../i18n'
 import AgentConfigExport from '../export/agent-config-export'
 
@@ -19,12 +29,6 @@ type ModelEvaluationProps = {
   providers: ProviderResult[]
   view: 'ranking' | 'provider'
   providerColors: Record<string, string>
-}
-
-function getScoreColor(ratio: number): string {
-  if (ratio >= 0.66) return '#3FCF8E'
-  if (ratio >= 0.33) return '#E8B44C'
-  return '#E2625F'
 }
 
 function formatTps(value: number | null): string {
@@ -42,14 +46,10 @@ function formatMs(value: number | null | undefined): string {
   return `${value.toLocaleString()} ms`
 }
 
-function DetailMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="detail-metric">
-      <small>{label}</small>
-      <strong>{value}</strong>
-    </span>
-  )
-}
+type ModelTableRow = RankedModel
+
+const modelTableFeatures = tableFeatures({})
+const columnHelper = createColumnHelper<typeof modelTableFeatures, ModelTableRow>()
 
 export default function ModelEvaluation({
   models,
@@ -60,8 +60,22 @@ export default function ModelEvaluation({
   const { t, locale } = useI18n()
   const method = getEvaluationMethod(DEFAULT_EVALUATION_METHOD_ID)
   const [exportTarget, setExportTarget] = useState('free-ids')
+  const [copySignal, setCopySignal] = useState(0)
 
   const rankedModels = useMemo(() => method.rank(models), [models, method])
+  const fastestTtftModel = useMemo(() => findFastestTtftModel(models), [models])
+  const providerMeta = useMemo(() => {
+    return Object.fromEntries(providers.map((provider) => [provider.id, provider]))
+  }, [providers])
+
+  // ── json-viewer：首次展开时才构建数据集（惰性渲染）
+  const [jsonOpen, setJsonOpen] = useState(false)
+  const [jsonBuilt, setJsonBuilt] = useState(false)
+  const [jsonCopyFlash, setJsonCopyFlash] = useState<'ok' | 'fail' | null>(null)
+  const jsonCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── 模型行展开状态：受控 details.open，首行默认展开（P2-7）
+  const [rowOpenMap, setRowOpenMap] = useState<Record<string, boolean>>({})
 
   const { scoreMin, scoreMax } = useMemo(() => {
     const scores = rankedModels.map((m) => m.score).filter((s): s is number => s != null)
@@ -90,25 +104,254 @@ export default function ModelEvaluation({
     return grouped
   }, [rankedModels, providers, view])
 
+  const firstRowId = modelRows[0] ? `${modelRows[0].providerId}:${modelRows[0].id}` : null
+  useEffect(() => {
+    if (!firstRowId) return
+    setRowOpenMap((prev) => (firstRowId in prev ? prev : { ...prev, [firstRowId]: true }))
+  }, [firstRowId])
+
+  // 数据集结构对齐设计稿 buildDataset（下划线命名）；数据全部来自真实 props。
+  const rankingDataset = useMemo(() => {
+    if (!jsonBuilt) return null
+    const latestCheckedAt = modelRows.reduce((acc, m) => (m.checkedAt > acc ? m.checkedAt : acc), '')
+    return {
+      meta: {
+        title: t('table.title'),
+        note: method.noteKey ? t(method.noteKey) : '',
+        // 真实评测数据，非示例
+        sample: false,
+        // 采样时间直接展示本地化时间戳，无需额外标签文案
+        sampledAt: latestCheckedAt
+          ? new Date(latestCheckedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')
+          : null,
+      },
+      models: modelRows.map((model, i) => ({
+        rank: i + 1,
+        name: model.id,
+        ttft_ms: model.ttftMs ?? model.latencyMs,
+        tps: model.tokensPerSec ?? null,
+        e2e_ms: model.latencyMs,
+        // TODO(i18n/domain): 现有数据模型（ModelResult）无模型参数量字段，scale 暂置 null
+        scale: null,
+      })),
+    }
+  }, [jsonBuilt, modelRows, method, t, locale])
+
+  const handleToggleJson = useCallback(() => {
+    setJsonBuilt(true)
+    setJsonOpen((open) => !open)
+  }, [])
+
+  const handleCopyDataset = useCallback(async () => {
+    if (!rankingDataset) return
+    const text = JSON.stringify(rankingDataset, null, 2)
+    let ok = true
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      ok = false
+    }
+    setJsonCopyFlash(ok ? 'ok' : 'fail')
+    if (jsonCopyTimerRef.current) clearTimeout(jsonCopyTimerRef.current)
+    jsonCopyTimerRef.current = setTimeout(() => setJsonCopyFlash(null), 1400)
+  }, [rankingDataset])
+
+  const handleDownloadDataset = useCallback(() => {
+    if (!rankingDataset) return
+    const blob = new Blob([JSON.stringify(rankingDataset, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'model-eval-ranking.json'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [rankingDataset])
+
+  useEffect(() => {
+    return () => {
+      if (jsonCopyTimerRef.current) clearTimeout(jsonCopyTimerRef.current)
+    }
+  }, [])
+
+  const columns = useMemo(() => columnHelper.columns([
+    columnHelper.display({
+      id: 'rank',
+      header: t('table.col.rank'),
+      cell: ({ row }) => {
+        const model = row.original
+        const displayRank = view === 'provider' ? model.groupRank : model.rank
+        return <span className="m-rank">{String(displayRank).padStart(2, '0')}</span>
+      },
+    }),
+    columnHelper.display({
+      id: 'model',
+      header: t('table.col.model'),
+      cell: ({ row }) => {
+        const model = row.original
+        return (
+          <span className="m-name">
+            {model.id}
+            {fastestTtftModel?.id === model.id && rankedModels.length > 1 && (
+              <span className="m-badge">{t('badge.fastest')}</span>
+            )}
+          </span>
+        )
+      },
+    }),
+    columnHelper.display({
+      id: 'provider',
+      header: t('table.col.provider'),
+      cell: ({ row }) => {
+        const model = row.original
+        const providerColor = providerColors[model.providerId] ?? '#5FB8CE'
+        const provider = providerMeta[model.providerId]
+        const iconUrl = provider ? getProviderIconUrl(provider) : null
+        const providerUrl = provider ? getProviderHomeUrl(provider.baseUrl) : null
+        const linkInner = (
+          <>
+            <span className="mini-fav" style={{ '--prov': providerColor } as CSSProperties}>
+              {iconUrl ? (
+                <img
+                  src={iconUrl}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  onError={(event) => { event.currentTarget.style.visibility = 'hidden' }}
+                />
+              ) : null}
+            </span>
+            {model.providerName}
+          </>
+        )
+        return (
+          <span className="m-prov hide-sm">
+            {providerUrl ? (
+              <a
+                className="m-prov-link"
+                href={providerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => { event.stopPropagation() }}
+              >
+                {linkInner}
+              </a>
+            ) : (
+              <span className="m-prov-link">{linkInner}</span>
+            )}
+          </span>
+        )
+      },
+    }),
+    columnHelper.display({
+      id: 'score-bar',
+      header: '',
+      cell: ({ row }) => {
+        const model = row.original
+        const score = model.score
+        const ratio = score != null && scoreMax > scoreMin ? (score - scoreMin) / (scoreMax - scoreMin) : 0
+        const scorePct = ratio * 100
+        // 区带条按延迟档位着色（设计稿语义），宽度仍按综合分归一化
+        const ttft = model.ttftMs ?? model.latencyMs
+        return (
+          <span className="m-band hide-sm">
+              <span
+                className="m-band-fill"
+                style={{ '--ratio': Math.max(scorePct, 1) / 100, background: getTtftTierVar(ttft) } as CSSProperties}
+              />
+          </span>
+        )
+      },
+    }),
+    columnHelper.display({
+      id: 'ttft',
+      header: t('table.col.ttft'),
+      cell: ({ row }) => {
+        const model = row.original
+        return (
+          <span className="m-num">
+            {(model.ttftMs ?? model.latencyMs).toLocaleString()}<small>ms</small>
+          </span>
+        )
+      },
+    }),
+    columnHelper.display({
+      id: 'tps',
+      header: t('table.col.tps'),
+      cell: ({ row }) => (
+        <span className="m-num">
+          {formatTps(row.original.tokensPerSec)}<small>t/s</small>
+        </span>
+      ),
+    }),
+    columnHelper.display({
+      id: 'e2e',
+      header: t('table.col.e2e'),
+      cell: ({ row }) => (
+        <span className="m-num hide-sm">
+          {row.original.latencyMs.toLocaleString()}<small>ms</small>
+        </span>
+      ),
+    }),
+    columnHelper.display({
+      id: 'score',
+      header: t('table.col.score'),
+      cell: ({ row }) => (
+        <span className="m-score hide-sm">
+          {row.original.score != null ? row.original.score.toFixed(1) : '—'}
+        </span>
+      ),
+    }),
+    columnHelper.display({
+      id: 'status',
+      header: t('table.col.status'),
+      cell: ({ row }) => {
+        const model = row.original
+        return (
+          <span className={`m-status ${model.freeStatus}`}>
+            {model.freeStatus === 'free' ? t('status.free') : t('status.available')}
+          </span>
+        )
+      },
+    }),
+    columnHelper.display({
+      id: 'expand',
+      header: '',
+      cell: () => (
+        <span className="m-caret" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M3 6 8 11 13 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      ),
+    }),
+  ]), [fastestTtftModel, providerColors, providerMeta, rankedModels.length, scoreMax, scoreMin, t, view])
+
+  const table = useTable({
+    features: modelTableFeatures,
+    data: modelRows,
+    columns,
+    getRowId: (row) => `${row.providerId}:${row.id}`,
+  })
+
+  const tableRows = table.getRowModel().rows
+
   const providerGroups = useMemo(() => {
     if (view !== 'provider') return []
     return [...providers]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((provider) => ({
         ...provider,
-        rows: modelRows.filter((model) => model.providerId === provider.id),
+        rows: tableRows.filter((row) => row.original.providerId === provider.id),
       }))
       .filter((provider) => provider.rows.length > 0)
-  }, [modelRows, providers, view])
+  }, [providers, tableRows, view])
 
-  function renderModelRow(model: RankedModel) {
-    const score = model.score
-    const ratio = score != null && scoreMax > scoreMin ? (score - scoreMin) / (scoreMax - scoreMin) : 0
-    const scorePct = ratio * 100
-    const color = getScoreColor(ratio)
-    const providerColor = providerColors[model.providerId] ?? '#5FB8CE'
-    const displayRank = view === 'provider' ? model.groupRank : model.rank
+  function renderModelRow(row: Row<typeof modelTableFeatures, ModelTableRow>, index: number) {
+    const model = row.original
     const checkedAt = new Date(model.checkedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')
+    const isEstimatedTps = model.tpsQuality === 'estimated'
     // 吞吐用端到端耗时（latencyMs）作为时间 T，更贴近「一段时间内处理 N 个 token」的定义
     const generationMs = model.latencyMs
     const estimatedCompletionTokens = estimateTokensFromContent(model.content)
@@ -116,111 +359,76 @@ export default function ModelEvaluation({
       ? t('detail.calc.providerTokens')
       : t('detail.calc.estimatedTokens')
     const tpsTokens = model.tokenUsage.completionTokens ?? estimatedCompletionTokens
-    const sampleJsonText = JSON.stringify({
+    const sampleJson = {
       model: model.id,
       provider: model.providerName,
       freeStatus: model.freeStatus,
       ttftMs: model.ttftMs ?? model.latencyMs,
       latencyMs: model.latencyMs,
       tokensPerSec: model.tokensPerSec,
+      tpsQuality: model.tpsQuality,
       tokenUsage: model.tokenUsage,
       prompt: model.prompt ?? null,
       content: model.content ?? null,
       checkedAt: model.checkedAt,
-    }, null, 2)
+    }
 
     return (
       <details
-        className="model-row model-item"
-        key={`${model.providerId}:${model.id}`}
-        style={{ '--delay': `${model.rank * 45}ms` } as CSSProperties}
+        className="model-item"
+        key={row.id}
+        open={rowOpenMap[row.id] ?? false}
+        onToggle={(event) => {
+          const open = event.currentTarget.open
+          setRowOpenMap((prev) => (prev[row.id] === open ? prev : { ...prev, [row.id]: open }))
+        }}
+        style={{ '--delay': `${Math.min(index * 45, 360)}ms` } as CSSProperties}
       >
-        <summary title={t('detail.expandHint')} aria-label={`${model.id} ${t('detail.expandHint')}`}>
-          <span className="rank">{String(displayRank).padStart(2, '0')}</span>
-          <span className="model-name">
-            {model.id}
-            {model.rank === 1 && rankedModels.length > 1 && (
-              <span className="fastest-badge">{t('badge.fastest')}</span>
-            )}
-          </span>
-          <span className="model-provider">
-            <span className="provider-dot" style={{ background: providerColor }} />
-            {model.providerName}
-          </span>
-          <span className="lat-band-cell">
-            <span className="lat-band">
-              <span
-                className="lat-band-fill"
-                style={{ width: `${Math.max(scorePct, 1)}%`, background: color }}
-              />
-            </span>
-          </span>
-          <span className="latency">
-            <span className="latency-val">{model.ttftMs ?? model.latencyMs}</span>
-            <small>ms</small>
-          </span>
-          <span className="metric-tps">
-            <span className="latency-val">{formatTps(model.tokensPerSec)}</span>
-            <small>t/s</small>
-          </span>
-          <span className="metric-e2e">
-            <span className="latency-val">{model.latencyMs}</span>
-            <small>ms</small>
-          </span>
-          <span className="metric-score">
-            {model.score != null ? model.score.toFixed(1) : '—'}
-          </span>
-          <span className={`model-status ${model.freeStatus}`}>
-            {model.freeStatus === 'free' ? t('status.free') : t('status.available')}
-          </span>
-          <span className="expand-caret" aria-hidden="true">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <path d="M3 6 8 11 13 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
+        <summary className="model-row" title={t('detail.expandHint')} aria-label={`${model.id} ${t('detail.expandHint')}`}>
+          {row.getAllCells().map((cell) => (
+            <Fragment key={cell.id}>
+              <table.FlexRender cell={cell} />
+            </Fragment>
+          ))}
         </summary>
-        <div className="model-detail">
-          <div className="detail-heading">
-            <span>{t('detail.evidence')}</span>
-            <small>{t('detail.evidenceNote')}</small>
-          </div>
-          <div className="detail-metrics">
-            <DetailMetric label={t('detail.promptTokens')} value={formatNumber(model.tokenUsage.promptTokens)} />
-            <DetailMetric label={t('detail.completionTokens')} value={formatNumber(model.tokenUsage.completionTokens)} />
-            <DetailMetric label={t('detail.totalTokens')} value={formatNumber(model.tokenUsage.totalTokens)} />
-            <DetailMetric label={t('detail.ttft')} value={formatMs(model.ttftMs ?? model.latencyMs)} />
-            <DetailMetric label={t('detail.latency')} value={formatMs(model.latencyMs)} />
-            <DetailMetric label={t('detail.checked')} value={checkedAt} />
-          </div>
-          <div className="detail-sample-grid">
-            <div className="detail-sample-left">
-              <div className="detail-json">
-                <b className="detail-json-label">{t('detail.rawData')}</b>
-                <pre className="detail-json-code"><code>{sampleJsonText}</code></pre>
-              </div>
+        <div className="m-detail">
+          <div className="m-detail-box">
+            <div className="m-detail-head">
+              <strong>{t('detail.evidence')}</strong>
+              <small>{t('detail.evidenceNote')}</small>
             </div>
-            <div className="detail-calc-grid">
-              <span>
-                <b>{t('detail.calc.ttft')}</b>
-                <code>{t('detail.calc.ttftFormula', { ttft: formatMs(model.ttftMs ?? model.latencyMs) })}</code>
-              </span>
-              <span>
-                <b>{t('detail.calc.e2e')}</b>
-                <code>{t('detail.calc.e2eFormula', { latency: formatMs(model.latencyMs) })}</code>
-              </span>
-              <span>
-                <b>{t('detail.calc.tps')}</b>
-                <code>
-                  {model.tokensPerSec == null
-                    ? t('detail.calc.tpsUnavailable')
-                    : t('detail.calc.tpsFormula', {
-                      tokens: formatNumber(tpsTokens),
-                      duration: formatMs(generationMs),
-                      tps: `${formatTps(model.tokensPerSec)} t/s`,
-                      source: tpsTokenSource,
-                    })}
-                </code>
-              </span>
+            <div className="m-detail-cols">
+              <div className="m-detail-col m-detail-json">
+                <div className="m-detail-colhead">
+                  <b>{t('detail.rawJson')}</b>
+                </div>
+                <div className="json-code"><pre dangerouslySetInnerHTML={{ __html: highlightJson(sampleJson) }} /></div>
+              </div>
+              <div className="m-detail-col">
+                <div className="m-detail-colhead">
+                  <b>{t('detail.formulas')}</b>
+                  <span className="verdict">{model.freeStatus === 'free' ? 'FREE' : 'AVAILABLE'}</span>
+                </div>
+                <ul className="m-formula-ol">
+                  <li><code>{t('detail.calc.ttftFormula', { ttft: formatMs(model.ttftMs ?? model.latencyMs) })}</code></li>
+                  <li><code>{t('detail.calc.e2eFormula', { latency: formatMs(model.latencyMs) })}</code></li>
+                  <li>
+                    <code>
+                      {model.tokensPerSec == null
+                        ? t('detail.calc.tpsUnavailable')
+                        : t('detail.calc.tpsFormula', {
+                          tokens: formatNumber(tpsTokens),
+                          duration: formatMs(generationMs),
+                          tps: `${formatTps(model.tokensPerSec)} t/s`,
+                          source: tpsTokenSource,
+                        })}
+                      {isEstimatedTps ? ` ${t('detail.calc.estimatedScoreExcluded')}` : ''}
+                    </code>
+                  </li>
+                  <li><code>{t('detail.calc.scoreFormula', { score: model.score != null ? model.score.toFixed(1) : 'N/A' })}</code></li>
+                  <li><code>{t('detail.checked')}: {checkedAt}</code></li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -229,45 +437,96 @@ export default function ModelEvaluation({
   }
 
   return (
-    <section className="table-section evaluation-section">
-      <div className="section-header">
-        <div>
-          <span className="section-kicker">
+    <section className="section table-section evaluation-section">
+      <div className="section-head">
+        <div className="rank-title">
+          <button
+            type="button"
+            className="rank-toggle"
+            aria-expanded={jsonOpen}
+            aria-controls="rank-json"
+            onClick={handleToggleJson}
+          >
             {t(view === 'ranking' ? 'table.title' : 'table.titleProvider')}
             {method.noteKey ? (
-              <i className="legend-help section-help" aria-label={t(method.noteKey)} data-tooltip={t(method.noteKey)}>?</i>
+              <i className="help-dot section-help" aria-label={t(method.noteKey)} data-tip={t(method.noteKey)}>?</i>
             ) : null}
-          </span>
+            <span className="rank-caret" aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6 8 10 12 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </span>
+          </button>
         </div>
-        <div className="agent-export-control">
-          <label className="agent-export-label" htmlFor="agent-export-select">{t('agent.label')}</label>
+        <div className="export-bar">
+          <label className="export-control" htmlFor="agent-export-select">
+            <span className="mono-eyebrow">{t('agent.label')}</span>
+          </label>
           <select
             id="agent-export-select"
-            className="agent-export-select"
+            className="export-select"
             value={exportTarget}
-            onChange={(e) => setExportTarget(e.target.value)}
+            onChange={(e) => {
+              setExportTarget(e.target.value)
+            }}
           >
             <option value="free-ids">{t('agent.modelIds')}</option>
             {AGENT_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>{option.label}</option>
             ))}
           </select>
+          <button
+            className="btn btn-ghost export-btn"
+            type="button"
+            onClick={() => setCopySignal((signal) => signal + 1)}
+          >
+            {t('agent.copy')}
+          </button>
         </div>
       </div>
 
-      <div className="model-table">
-        <div className="model-row model-header eval-header">
-          <span>{t('table.col.rank')}</span>
-          <span>{t('table.col.model')}</span>
-          <span>{t('table.col.provider')}</span>
-          <span aria-hidden="true" />
-          <span>{t('table.col.ttft')}</span>
-          <span>{t('table.col.tps')}</span>
-          <span>{t('table.col.e2e')}</span>
-          <span>{t('table.col.score')}</span>
-          <span>{t('table.col.status')}</span>
-          <span aria-hidden="true" />
+      <div
+        id="rank-json"
+        className={`json-viewer${jsonOpen ? ' open' : ''}`}
+        role="region"
+        aria-label={t('eval.json.ariaLabel')}
+      >
+        <div className="json-viewer-head">
+          <span className="json-viewer-title">
+            <span className="mono-eyebrow">{t('eval.json.title')}</span>
+            <span className="json-sample">{t('eval.json.real')}</span>
+          </span>
+          <div className="json-viewer-actions">
+            <button
+              type="button"
+              className={`json-btn copy${jsonCopyFlash === 'ok' ? ' copied' : ''}`}
+              onClick={handleCopyDataset}
+            >
+              {jsonCopyFlash === 'ok' ? t('agent.copied') : jsonCopyFlash === 'fail' ? t('agent.copyFailed') : t('agent.copy')}
+            </button>
+            <button type="button" className="json-btn primary" onClick={handleDownloadDataset}>
+              {t('eval.json.download')}
+            </button>
+            <button type="button" className="json-btn" onClick={() => { setJsonOpen(false) }}>
+              {t('eval.json.collapse')}
+            </button>
+          </div>
         </div>
+        <div className="json-code"><pre dangerouslySetInnerHTML={{ __html: rankingDataset ? highlightJson(rankingDataset) : '' }} /></div>
+      </div>
+
+      <div className="model-card" key={view}>
+        <div className="model-scroll">
+          <div className="model-head">
+            <span>{t('table.col.rank')}</span>
+            <span>{t('table.col.model')}</span>
+            <span className="hide-sm">{t('table.col.provider')}</span>
+            <span className="hide-sm">{t('table.col.latency')}</span>
+            <span className="mh-right">{t('table.col.ttft')}</span>
+            <span className="mh-right">{t('table.col.tps')}</span>
+            <span className="mh-right hide-sm">{t('table.col.e2e')}</span>
+            <span className="mh-right hide-sm">{t('table.col.score')}</span>
+            <span className="mh-center">{t('table.col.status')}</span>
+            <span />
+          </div>
 
         {modelRows.length === 0 && (
           <div className="empty-state">
@@ -292,7 +551,8 @@ export default function ModelEvaluation({
               {provider.rows.map(renderModelRow)}
             </div>
           ))
-          : modelRows.map(renderModelRow)}
+          : tableRows.map(renderModelRow)}
+        </div>
       </div>
 
       {exportTarget && (
@@ -300,6 +560,7 @@ export default function ModelEvaluation({
           providers={providers}
           models={models}
           exportTarget={exportTarget}
+          copySignal={copySignal}
           compact
         />
       )}
