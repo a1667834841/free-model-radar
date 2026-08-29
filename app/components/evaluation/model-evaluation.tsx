@@ -208,7 +208,7 @@ export default function ModelEvaluation({
         const providerColor = providerColors[model.providerId] ?? '#5FB8CE'
         const provider = providerMeta[model.providerId]
         const iconUrl = provider ? getProviderIconUrl(provider) : null
-        const providerUrl = provider ? getProviderHomeUrl(provider.baseUrl) : null
+        const providerUrl = provider ? getProviderHomeUrl(provider) : null
         const linkInner = (
           <>
             <span className="mini-fav" style={{ '--prov': providerColor } as CSSProperties}>

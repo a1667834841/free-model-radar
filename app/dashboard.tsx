@@ -305,7 +305,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
           <div className="overview-list">
             {providerOverview.map((p, idx) => {
               const color = providerColors[p.id]
-              const homeUrl = getProviderHomeUrl(p.baseUrl)
+              const homeUrl = getProviderHomeUrl(p)
               const faviconUrl = getProviderIconUrl(p, homeUrl)
               const leftPct = p.modelCount > 0 ? (p.min / ttftScaleMax) * 100 : 0
               const widthPct = p.modelCount > 0 ? ((p.max - p.min) / ttftScaleMax) * 100 : 0
