@@ -34,37 +34,10 @@ export async function startRefresh(env: RadarEnv, queue: Queue<RefreshQueueMessa
   const existingJob = await getRefreshJob(env.RADAR_KV)
   const refreshId = existingJob?.refreshId ?? createRefreshId()
 
-  let locked: boolean
-  try {
-    locked = await acquireRefreshLock(env.RADAR_KV, refreshId)
-  } catch (error) {
-    // KV 偶发 500 时不要让手动触发失败；入队后由 consumer 兜底重试。
-    log(refreshId, 'startRefresh: lock probe threw (KV error), enqueueing anyway', { error: safeErrorMessage(error), tookMs: Date.now() - startedAt })
-    try {
-      await queue.send({ refreshId, isNewRefresh: !existingJob })
-    } catch (queueError) {
-      log(refreshId, 'startRefresh: queue.send FAILED after lock probe error', { error: safeErrorMessage(queueError) })
-      return { accepted: false, status: 500, error: 'Failed to enqueue refresh' }
-    }
+  if (existingJob) {
+    log(refreshId, 'startRefresh: existing refresh still running', { tookMs: Date.now() - startedAt })
     return { accepted: true, refreshId }
   }
-
-  if (!locked) {
-    // 已有任务在跑（或刚结束、锁尚未释放）。若 job 仍是同一 refreshId，说明刷新还在进行，幂等返回 202；否则 409。
-    const currentJob = await getRefreshJob(env.RADAR_KV)
-    log(refreshId, 'startRefresh: lock busy', {
-      sameRefreshId: currentJob?.refreshId === refreshId,
-      currentJobRefreshId: currentJob?.refreshId ?? null,
-      tookMs: Date.now() - startedAt,
-    })
-    if (currentJob?.refreshId === refreshId) {
-      return { accepted: true, refreshId }
-    }
-    return { accepted: false, status: 409, error: 'Refresh already running' }
-  }
-
-  // 只探测锁，真正的锁由 Queue consumer 按批获取。
-  await releaseRefreshLock(env.RADAR_KV)
 
   if (!existingJob) {
     await putRefreshStatus(env.RADAR_KV, {
@@ -137,20 +110,24 @@ export async function runRefresh(env: RadarEnv, refreshId: string, fetchImpl: ty
       return
     }
 
-    log(refreshId, 'runRefresh: all models done, writing final snapshot', { total: job.total })
-
-    const updatedAt = new Date().toISOString()
-    const latestResults = await getLatestResults(env.RADAR_KV)
-    const snapshot: ResultsSnapshot = {
-      updatedAt,
-      refreshId,
-      providers: mergeProviderResults(latestResults, job.providers.map(toProviderResult), job, batch.healthState),
-    }
     const currentTrendSamples = job.providers.flatMap((provider) => provider.trendSamples ?? [])
-    const existingTrends = await getTrendResponse(env.RADAR_KV)
-    const missingTrendSamples = createMissingTrendSamples(existingTrends.modelStats, currentTrendSamples, snapshot.updatedAt)
-    await putLatestResults(env.RADAR_KV, snapshot)
-    await appendTrendSamples(env.RADAR_KV, [...currentTrendSamples, ...missingTrendSamples])
+    const hasProbeWork = currentTrendSamples.length > 0
+    log(refreshId, 'runRefresh: all models done, writing final state', { total: job.total, hasProbeWork })
+
+    if (hasProbeWork) {
+      const updatedAt = new Date().toISOString()
+      const latestResults = await getLatestResults(env.RADAR_KV)
+      const snapshot: ResultsSnapshot = {
+        updatedAt,
+        refreshId,
+        providers: mergeProviderResults(latestResults, job.providers.map(toProviderResult), job, batch.healthState),
+      }
+      const existingTrends = await getTrendResponse(env.RADAR_KV)
+      const missingTrendSamples = createMissingTrendSamples(existingTrends.modelStats, currentTrendSamples, snapshot.updatedAt)
+      await putLatestResults(env.RADAR_KV, snapshot)
+      await appendTrendSamples(env.RADAR_KV, [...currentTrendSamples, ...missingTrendSamples])
+    }
+
     await patchRefreshRuntimeState(env.RADAR_KV, {
       refreshJob: null,
       refreshStatus: {

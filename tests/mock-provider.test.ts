@@ -560,7 +560,7 @@ describe('mock provider refresh', () => {
     expect(runtimeState.modelHealthState['provider-a:free-model'].requestFailureCount).toBe(1)
   })
 
-  it('keeps disappeared historical models as missing trend samples', async () => {
+  it('skips missing trend writes when a refresh has no probe work', async () => {
     const kv = new MemoryKV()
     await kv.put('providers-config', JSON.stringify({
       version: 1,
@@ -594,9 +594,8 @@ describe('mock provider refresh', () => {
     const trendEntry = Array.from(kv.store.entries()).find(([key]) => key.startsWith('trend:'))
     expect(trendEntry).toBeDefined()
     const bucket = JSON.parse(trendEntry?.[1] ?? '{"samples":[]}')
-    expect(bucket.samples).toEqual(expect.arrayContaining([
+    expect(bucket.samples).toEqual([
       expect.objectContaining({ modelId: 'free-model', status: 'ok' }),
-      expect.objectContaining({ modelId: 'free-model', status: 'missing', ttftMs: null, tokensPerSec: null, latencyMs: null }),
-    ]))
+    ])
   })
 })
