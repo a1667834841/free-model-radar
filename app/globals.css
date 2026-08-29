@@ -2069,21 +2069,8 @@ svg {
 }
 
 .model-scroll {
-  max-height: calc(100vh - 180px);
-  overflow: auto;
+  overflow: visible;
   border-radius: var(--radius);
-  scrollbar-color: var(--line-light) transparent;
-  scrollbar-width: thin;
-}
-
-.model-scroll::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.model-scroll::-webkit-scrollbar-thumb {
-  border-radius: 6px;
-  background: var(--line-light);
 }
 
 .model-head,
