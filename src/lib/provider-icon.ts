@@ -13,8 +13,6 @@ const PROVIDER_ICON_DOMAINS: Record<string, string> = {
   aihubmix: 'aihubmix.com/favicon.ico',
   bynara: 'router.bynara.id',
   opencode: 'opencode.ai',
-  tokenharbor: 'tokenharbor.ai',
-  tokenrouter: 'tokenrouter.com',
   rntm: 'rntm.sh',
 }
 
@@ -31,8 +29,6 @@ const PROVIDER_HOME_URLS: Record<string, string> = {
   bynara: 'https://router.bynara.id',
   sensenova: 'https://www.sensenova.cn',
   'b-ai': 'https://b.ai',
-  tokenrouter: 'https://www.tokenrouter.com',
-  tokenharbor: 'https://tokenharbor.ai',
   rntm: 'https://rntm.sh',
   aihubmix: 'https://aihubmix.com',
   opencode: 'https://opencode.ai',

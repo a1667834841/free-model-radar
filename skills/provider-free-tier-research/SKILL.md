@@ -1,6 +1,6 @@
 ---
 name: provider-free-tier-research
-description: 查询 AI 模型提供商（OpenRouter、Bynara、SenseNova、B.AI、TokenRouter、TokenHarbor、RNTM 等聚合平台）的免费规则与定价信息，用于更新 README 的「厂商免费规则」表格或为新增 Provider 补充资料。先读 config/providers.local.json 确定真实接入的厂商，再用 web_search 搜索定位官方 pricing 页面，用 read_page（firecrawl）抓取确认（裸 fetch 会被 403/401 拦截），最后按统一口径提炼成表格。
+description: 查询 AI 模型提供商（OpenRouter、Bynara、SenseNova、B.AI、RNTM 等聚合平台）的免费规则与定价信息，用于更新 README 的「厂商免费规则」表格或为新增 Provider 补充资料。先读 config/providers.local.json 确定真实接入的厂商，再用 web_search 搜索定位官方 pricing 页面，用 read_page（firecrawl）抓取确认（裸 fetch 会被 403/401 拦截），最后按统一口径提炼成表格。
 ---
 
 # 查询 AI 厂商免费规则（Provider Free Tier Research）
@@ -9,7 +9,7 @@ description: 查询 AI 模型提供商（OpenRouter、Bynara、SenseNova、B.AI�
 
 - 更新或修正文档中的「厂商免费规则」表格（如 `README.md`）
 - 为新增 Provider 补充免费额度、速率限制、免费模型命名规则等信息
-- 核对某个 AI 模型聚合平台（OpenRouter / B.AI / TokenRouter 等）的定价政策
+- 核对某个 AI 模型聚合平台（OpenRouter / B.AI / RNTM 等）的定价政策
 
 ## 步骤
 
@@ -25,14 +25,14 @@ description: 查询 AI 模型提供商（OpenRouter、Bynara、SenseNova、B.AI�
 - 每家厂商一组关键词，例如：
   - `OpenRouter free models pricing`
   - `B.AI 免费模型 定价`
-  - `TokenRouter free tier`
+  - `RNTM free route pricing`
   - `{厂商名} free tier / free models / pricing`
 - 从搜索结果中挑出**官方 pricing / docs 页面 URL**（域名为厂商官网），以及可信的第三方总结页；记录这些 URL 供下一步抓取。
 
 ### 3. 抓取官方信息源（关键：抓取方式）
 
 - 用上一步 `web_search` 定位到的官方 URL，**优先用 `read_page`（firecrawl），不要用裸 `fetch`**：
-  - 多个厂商官网（B.AI、TokenRouter 等）对裸 `fetch` 返回 403 / 401 / 空文本，且不少官网是 SPA（JS 渲染），裸请求拿不到正文。
+  - 多个厂商官网（B.AI 等）对裸 `fetch` 返回 403 / 401 / 空文本，且不少官网是 SPA（JS 渲染），裸请求拿不到正文。
   - firecrawl 能绕过简单反爬并渲染 JS。
 - 优先抓**官方 pricing / docs 页面**，例如 `https://openrouter.ai/pricing`、各厂商官网的 `/pricing`、`/docs`。
 - 官方页面缺失时才参考第三方来源，且必须交叉验证。
