@@ -315,8 +315,30 @@ const SERIES_COLORS = [
   'var(--prov-bai)', 'var(--lat-slow)', 'color-mix(in oklch, var(--cyan) 55%, var(--accent))',
   'color-mix(in oklch, var(--green) 50%, var(--cyan))', 'color-mix(in oklch, var(--purple) 55%, var(--accent))',
 ]
-const CHART_SERIES_LIMIT = 10
+const CHART_SERIES_LIMIT = 5
 const HOUR_LABELS = ['00', '03', '06', '09', '12', '15', '18', '21', '23']
+
+function smoothPath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return ''
+  if (points.length === 1) return `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`
+  if (points.length === 2) {
+    return `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)} L ${points[1].x.toFixed(1)} ${points[1].y.toFixed(1)}`
+  }
+
+  let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[Math.max(0, i - 1)]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[Math.min(points.length - 1, i + 2)]
+    const cp1x = p1.x + (p2.x - p0.x) / 6
+    const cp1y = p1.y + (p2.y - p0.y) / 6
+    const cp2x = p2.x - (p3.x - p1.x) / 6
+    const cp2y = p2.y - (p3.y - p1.y) / 6
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`
+  }
+  return d
+}
 
 function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggleModel, rangeDays }: {
   title: string
@@ -509,17 +531,17 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
             <rect x={CHART_PAD.left} y={CHART_PAD.top} width={plotW} height={plotH} fill="transparent" />
             {/* 设计稿 L965：best（越低越好的最优曲线）最后绘制、叠在最上层 */}
             {[...visibleSeries].reverse().map((item) => {
-              const points = item.pts.map((point, index) => `${xAt(index).toFixed(1)},${y(point.v).toFixed(1)}`)
+              const points = item.pts.map((point, index) => ({ x: xAt(index), y: y(point.v) }))
               const last = item.pts[item.pts.length - 1]
               return (
                 <g key={item.key} className="chart-series">
                   {points.length > 0 ? (
                     <path
                       className="series-line"
-                      d={`M ${points.join(' L ')}`}
+                      d={smoothPath(points)}
                       fill="none"
                       stroke={item.color}
-                      strokeWidth="2.4"
+                      strokeWidth="1.35"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       style={{ opacity: seriesLineOpacity(item.key) }}
@@ -532,7 +554,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
                       className="series-end"
                       cx={xAt(item.pts.length - 1)}
                       cy={y(last.v)}
-                      r="3"
+                      r="2.2"
                       fill={item.color}
                       stroke="var(--bg)"
                       strokeWidth="1.5"
