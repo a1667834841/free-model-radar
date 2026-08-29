@@ -105,7 +105,7 @@ describe('mock provider refresh', () => {
     }))
 
     let healthState: ModelHealthState = {}
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 30; index += 1) {
       healthState = recordModelFailure(healthState, 'provider-a', 'a-free-hidden', '2026-08-27T09:00:00.000Z')
     }
     await kv.put('model-health-state', JSON.stringify(healthState))

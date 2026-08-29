@@ -30,14 +30,47 @@ describe('model filtering', () => {
     expect(selected.map((model) => model.id)).toEqual(['a-free', 'b-free'])
   })
 
-  it('falls back to all non-free models when no free models exist', () => {
+  it('falls back to all non-free models when no free models exist in a small provider', () => {
     const selected = selectModelsForProbe(provider, [
       { id: 'z-paid' },
       { id: 'a-paid' },
       { id: 'b-paid' },
     ])
 
-    // 没有 free 模型时不截断，返回全部普通模型
     expect(selected.map((model) => model.id)).toEqual(['a-paid', 'b-paid', 'z-paid'])
+  })
+
+  it('skips large providers with no free candidates instead of probing all models', () => {
+    const selected = selectModelsForProbe(provider, Array.from({ length: 21 }, (_, index) => ({ id: `paid-${index}` })))
+
+    expect(selected).toEqual([])
+  })
+
+  it('selects OpenRouter models with zero prompt and completion pricing', () => {
+    const selected = selectModelsForProbe({ ...provider, id: 'openrouter' }, [
+      { id: 'paid', pricing: { prompt: '0.1', completion: '0' } },
+      { id: 'free-by-pricing', pricing: { prompt: '0', completion: '0' } },
+      { id: 'also-free-by-keyword:free', pricing: { prompt: '1', completion: '1' } },
+    ])
+
+    expect(selected.map((model) => model.id)).toEqual(['also-free-by-keyword:free', 'free-by-pricing'])
+  })
+
+  it('does not fallback to all OpenRouter models when no pricing-free models are due', () => {
+    const selected = selectModelsForProbe({ ...provider, id: 'openrouter' }, [
+      { id: 'paid-a', pricing: { prompt: '0.1', completion: '0.2' } },
+      { id: 'paid-b', pricing: { prompt: '0.3', completion: '0.4' } },
+    ])
+
+    expect(selected).toEqual([])
+  })
+
+  it('selects RNTM models with hasFreeRoute', () => {
+    const selected = selectModelsForProbe({ ...provider, id: 'rntm' }, [
+      { id: 'paid', hasFreeRoute: false },
+      { id: 'free-route', hasFreeRoute: true },
+    ])
+
+    expect(selected.map((model) => model.id)).toEqual(['free-route'])
   })
 })

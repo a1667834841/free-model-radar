@@ -12,7 +12,16 @@ function parseModelsPayload(payload: unknown): DiscoveredModel[] {
     .map((item) => {
       if (!item || typeof item !== 'object') return null
       const id = (item as { id?: unknown }).id
-      return typeof id === 'string' && id.trim() ? { id } : null
+      if (typeof id !== 'string' || !id.trim()) return null
+
+      const pricing = (item as { pricing?: unknown }).pricing
+      const hasFreeRoute = (item as { has_free_route?: unknown }).has_free_route
+      const model: DiscoveredModel = {
+        id,
+        pricing: pricing && typeof pricing === 'object' ? pricing as DiscoveredModel['pricing'] : null,
+        hasFreeRoute: typeof hasFreeRoute === 'boolean' ? hasFreeRoute : null,
+      }
+      return model
     })
     .filter((model): model is DiscoveredModel => model !== null)
 }

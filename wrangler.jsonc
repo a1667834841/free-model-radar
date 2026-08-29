@@ -35,7 +35,7 @@
   },
   "triggers": {
     "crons": [
-      "0 * * * *"
+      "*/2 * * * *"
     ]
   },
   "observability": {

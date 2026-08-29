@@ -13,4 +13,5 @@ dry-run-worker
 config/providers.local.json
 coverage
 dist
+.probe-out
 *.tsbuildinfo

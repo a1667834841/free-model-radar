@@ -12,7 +12,7 @@ import { getModelHealthState, putModelHealthState } from '@/storage/model-health
 import { acquireRefreshLock, releaseRefreshLock } from '@/storage/refresh-lock'
 import { discoverModels } from './provider-discovery'
 import { probeModel } from './model-prober'
-import { isModelHidden, recordModelFailure, recordModelSuccess, type ModelHealthState } from './model-health-service'
+import { classifyProbeFailure, isModelDueForProbe, isModelHidden, recordModelFailure, recordModelSuccess, type ModelHealthState } from './model-health-service'
 
 import { safeErrorMessage } from '@/lib/json'
 
@@ -256,9 +256,10 @@ async function createRefreshJob(
       const apiKey = getSecret(env, provider.secretName)
       const discoveredModels = await discoverModels(provider, apiKey, fetchImpl)
       const visibleModels = discoveredModels.filter((model) => !isModelHidden(healthState, provider.id, model.id))
-      const selectedModels = selectModelsForProbe(provider, visibleModels)
+      const dueModels = visibleModels.filter((model) => isModelDueForProbe(healthState, provider.id, model.id))
+      const selectedModels = selectModelsForProbe(provider, dueModels)
       jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, secretName: provider.secretName, models: selectedModels, cursor: 0, successfulModels: [], trendSamples: [] })
-      log(refreshId, 'discover: ok', { provider: provider.id, discovered: discoveredModels.length, visible: visibleModels.length, selected: selectedModels.length, tookMs: Date.now() - t })
+      log(refreshId, 'discover: ok', { provider: provider.id, discovered: discoveredModels.length, visible: visibleModels.length, due: dueModels.length, selected: selectedModels.length, tookMs: Date.now() - t })
     } catch (error) {
       jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, secretName: provider.secretName, models: [], cursor: 0, successfulModels: [], trendSamples: [] })
       log(refreshId, 'discover: FAILED', { provider: provider.id, error: safeErrorMessage(error), tookMs: Date.now() - t })
@@ -391,7 +392,7 @@ async function processNextBatch(
         checkedAt: probeResult.checkedAt,
       })
     } else {
-      nextHealthState = recordModelFailure(nextHealthState, provider.id, probeResult.modelId, probeResult.checkedAt)
+      nextHealthState = recordModelFailure(nextHealthState, provider.id, probeResult.modelId, probeResult.checkedAt, classifyProbeFailure(probeResult.error))
       jobProvider.trendSamples?.push({
         providerId: provider.id,
         providerName: provider.name,
