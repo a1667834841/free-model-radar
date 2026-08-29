@@ -92,9 +92,11 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
   const { t, locale, setLocale } = useI18n()
   const [pageView, setPageView] = useState<'overview' | 'trends'>('overview')
   const [modelView, setModelView] = useState<'ranking' | 'provider'>('ranking')
+  const [hydrated, setHydrated] = useState(false)
 
   // 视图选择持久化（设计稿 L810-831）：SSR 下只在 effect 内读 localStorage，首帧固定 overview
   useEffect(() => {
+    setHydrated(true)
     try {
       const saved = localStorage.getItem('model-eval-view')
       if (saved === 'overview' || saved === 'trends') setPageView(saved)
@@ -156,6 +158,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
     ? Math.max(8, Math.min(100, (fastestTtftModel.ttftMs / globalMaxTtft) * 100))
     : 0
   const providerHealthPct = providers.length > 0 ? (healthyProviders / providers.length) * 100 : 0
+  const relativeUpdatedAt = hydrated && updatedAt ? formatRelative(updatedAt, locale) : '—'
 
   return (
     <div className="dashboard">
@@ -186,7 +189,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
           </span>
           {updatedAt && (
             <span className="topbar-ts">
-              {t('data.lastRefresh')} · {formatRelative(updatedAt, locale)}
+              {t('data.lastRefresh')} · {relativeUpdatedAt}
             </span>
           )}
           <div className="lang-switch" role="group" aria-label={t('lang.toggle')}>
@@ -236,7 +239,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
         <article className="kpi-hero">
           <div className="kpi-hero-top">
             <span className="kpi-eyebrow">{t('metric.fastestTtft')} · {t('metric.fastest')}</span>
-            <span className="kpi-status"><span className="dot" />1hr · {updatedAt ? formatRelative(updatedAt, locale) : '—'}</span>
+            <span className="kpi-status"><span className="dot" />1hr · {relativeUpdatedAt}</span>
           </div>
           <div>
             <div className="kpi-big">{fastestTtftModel ? <CountUpNumber value={fastestTtftModel.ttftMs} /> : '--'}{fastestTtftModel ? <small>ms</small> : null}</div>
