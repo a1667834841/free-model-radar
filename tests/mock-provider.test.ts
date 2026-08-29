@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { runRefresh, startRefresh, processRefreshMessage } from '@/services/refresh-service'
 import type { RadarEnv } from '@/domain/env'
 import type { RefreshQueueMessage } from '@/domain/refresh'
-import { recordModelFailure, type ModelHealthState } from '@/services/model-health-service'
+import { recordModelFailure, recordModelSuccess, type ModelHealthState } from '@/services/model-health-service'
 
 function streamingProbeResponse(usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }) {
   const chunks = [
@@ -388,6 +388,126 @@ describe('mock provider refresh', () => {
     // 完成后 job 应被删除，不再继续入队
     expect(await kv.get('refresh-job')).toBeNull()
     expect(sent).toHaveLength(0)
+  })
+
+  it('keeps previous successful results when a model is not due for probing', async () => {
+    const kv = new MemoryKV()
+    await kv.put('providers-config', JSON.stringify({
+      version: 1,
+      updatedAt: '2026-08-27T09:00:00.000Z',
+      providers: [{
+        id: 'provider-a',
+        name: 'Provider A',
+        baseUrl: 'https://api.example.com/v1',
+        secretName: 'PROVIDER_A_KEY',
+        enabled: true,
+        modelStrategy: 'free-first',
+        freeKeywords: ['free'],
+        probe: { maxModels: 20, concurrency: 1, attempts: 1, timeoutMs: 10000 },
+      }],
+    }))
+    await kv.put('latest-results', JSON.stringify({
+      updatedAt: '2026-08-27T09:00:00.000Z',
+      refreshId: 'previous-refresh',
+      providers: [{
+        id: 'provider-a',
+        name: 'Provider A',
+        baseUrl: 'https://api.example.com/v1',
+        secretName: 'PROVIDER_A_KEY',
+        status: 'healthy',
+        models: [{
+          id: 'free-model',
+          latencyMs: 123,
+          ttftMs: 45,
+          tokensPerSec: 10,
+          availability: 'available',
+          freeStatus: 'free',
+          prompt: 'old prompt',
+          content: 'old content',
+          tokenUsage: { promptTokens: 1, completionTokens: 2, totalTokens: 3 },
+          checkedAt: '2026-08-27T09:00:00.000Z',
+        }],
+      }],
+    }))
+    await kv.put('model-health-state', JSON.stringify(recordModelSuccess({}, 'provider-a', 'free-model', new Date().toISOString())))
+
+    const env = { RADAR_KV: kv as unknown as KVNamespace, PROVIDER_A_KEY: 'key' } satisfies RadarEnv
+    const probedModels: string[] = []
+    const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/models')) {
+        return new Response(JSON.stringify({ data: [{ id: 'free-model' }] }), { status: 200 })
+      }
+      probedModels.push((JSON.parse(String(init?.body)) as { model: string }).model)
+      return streamingProbeResponse()
+    }
+
+    await runRefresh(env, 'refresh-not-due', fetchImpl as typeof fetch)
+
+    const latestResults = JSON.parse((await kv.get('latest-results')) ?? 'null')
+    expect(probedModels).toEqual([])
+    expect(latestResults.providers[0].models).toHaveLength(1)
+    expect(latestResults.providers[0].models[0].content).toBe('old content')
+  })
+
+  it('keeps previous successful results when a due model is rate limited', async () => {
+    const kv = new MemoryKV()
+    await kv.put('providers-config', JSON.stringify({
+      version: 1,
+      updatedAt: '2026-08-27T09:00:00.000Z',
+      providers: [{
+        id: 'provider-a',
+        name: 'Provider A',
+        baseUrl: 'https://api.example.com/v1',
+        secretName: 'PROVIDER_A_KEY',
+        enabled: true,
+        modelStrategy: 'free-first',
+        freeKeywords: ['free'],
+        probe: { maxModels: 20, concurrency: 1, attempts: 1, timeoutMs: 10000 },
+      }],
+    }))
+    await kv.put('latest-results', JSON.stringify({
+      updatedAt: '2026-08-27T09:00:00.000Z',
+      refreshId: 'previous-refresh',
+      providers: [{
+        id: 'provider-a',
+        name: 'Provider A',
+        baseUrl: 'https://api.example.com/v1',
+        secretName: 'PROVIDER_A_KEY',
+        status: 'healthy',
+        models: [{
+          id: 'free-model',
+          latencyMs: 123,
+          ttftMs: 45,
+          tokensPerSec: 10,
+          availability: 'available',
+          freeStatus: 'free',
+          prompt: 'old prompt',
+          content: 'old content',
+          tokenUsage: { promptTokens: 1, completionTokens: 2, totalTokens: 3 },
+          checkedAt: '2026-08-27T09:00:00.000Z',
+        }],
+      }],
+    }))
+    await kv.put('model-health-state', JSON.stringify(recordModelSuccess({}, 'provider-a', 'free-model', '2026-08-27T09:00:00.000Z')))
+
+    const env = { RADAR_KV: kv as unknown as KVNamespace, PROVIDER_A_KEY: 'key' } satisfies RadarEnv
+    const fetchImpl = async (input: RequestInfo | URL) => {
+      const url = input.toString()
+      if (url.endsWith('/models')) {
+        return new Response(JSON.stringify({ data: [{ id: 'free-model' }] }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ error: 'rate limited' }), { status: 429 })
+    }
+
+    await runRefresh(env, 'refresh-rate-limited', fetchImpl as typeof fetch)
+
+    const latestResults = JSON.parse((await kv.get('latest-results')) ?? 'null')
+    const healthState = JSON.parse((await kv.get('model-health-state')) ?? '{}')
+    expect(latestResults.providers[0].models).toHaveLength(1)
+    expect(latestResults.providers[0].models[0].content).toBe('old content')
+    expect(healthState['provider-a:free-model'].lastStatus).toBe('rate_limited')
+    expect(healthState['provider-a:free-model'].requestFailureCount).toBe(1)
   })
 
   it('keeps disappeared historical models as missing trend samples', async () => {

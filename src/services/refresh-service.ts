@@ -1,12 +1,12 @@
 import type { RadarEnv } from '@/domain/env'
 import { getSecret } from '@/domain/env'
 import type { ProviderConfig } from '@/domain/provider'
-import type { ModelResult, ProviderResult, ResultsSnapshot } from '@/domain/result'
+import { sortModelsByLatency, type ModelResult, type ProviderResult, type ResultsSnapshot } from '@/domain/result'
 import type { TrendSample } from '@/domain/trend'
 import { selectModelsForProbe, type DiscoveredModel } from '@/domain/model'
 import { createRefreshId, type RefreshJob, type RefreshJobProvider, type RefreshQueueMessage } from '@/domain/refresh'
 import { getProviderConfig } from '@/storage/provider-config-store'
-import { deleteRefreshJob, getRefreshJob, putLatestResults, putRefreshJob, putRefreshStatus } from '@/storage/results-store'
+import { deleteRefreshJob, getLatestResults, getRefreshJob, putLatestResults, putRefreshJob, putRefreshStatus } from '@/storage/results-store'
 import { appendTrendSamples, getTrendResponse } from '@/storage/trend-store'
 import { getModelHealthState, putModelHealthState } from '@/storage/model-health-store'
 import { acquireRefreshLock, releaseRefreshLock } from '@/storage/refresh-lock'
@@ -134,10 +134,12 @@ export async function runRefresh(env: RadarEnv, refreshId: string, fetchImpl: ty
 
     log(refreshId, 'runRefresh: all models done, writing final snapshot', { total: job.total })
 
+    const updatedAt = new Date().toISOString()
+    const latestResults = await getLatestResults(env.RADAR_KV)
     const snapshot: ResultsSnapshot = {
-      updatedAt: new Date().toISOString(),
+      updatedAt,
       refreshId,
-      providers: job.providers.map(toProviderResult),
+      providers: mergeProviderResults(latestResults, job.providers.map(toProviderResult), job, batch.healthState),
     }
     const currentTrendSamples = job.providers.flatMap((provider) => provider.trendSamples ?? [])
     const existingTrends = await getTrendResponse(env.RADAR_KV)
@@ -440,6 +442,48 @@ function createMissingTrendSamples(
       tokensPerSec: null,
       latencyMs: null,
     }))
+}
+
+function mergeProviderResults(
+  previous: ResultsSnapshot | null,
+  currentProviders: ProviderResult[],
+  job: RefreshJob,
+  healthState: ModelHealthState,
+): ProviderResult[] {
+  const previousByProviderId = new Map(previous?.providers.map((provider) => [provider.id, provider]) ?? [])
+  const jobProviderById = new Map(job.providers.map((provider) => [provider.id, provider]))
+
+  return currentProviders.map((currentProvider) => {
+    const previousProvider = previousByProviderId.get(currentProvider.id)
+    const jobProvider = jobProviderById.get(currentProvider.id)
+    const currentModelById = new Map(currentProvider.models.map((model) => [model.id, model]))
+    const nextModelById = new Map<string, ModelResult>()
+
+    for (const model of previousProvider?.models ?? []) {
+      nextModelById.set(model.id, model)
+    }
+
+    for (const model of currentProvider.models) {
+      nextModelById.set(model.id, model)
+    }
+
+    for (const sample of jobProvider?.trendSamples ?? []) {
+      if (sample.status !== 'failed') continue
+      if (currentModelById.has(sample.modelId)) continue
+
+      const record = healthState[`${currentProvider.id}:${sample.modelId}`]
+      if (record?.hidden === true || record?.lastStatus === 'permanent_failure') {
+        nextModelById.delete(sample.modelId)
+      }
+    }
+
+    const models = sortModelsByLatency([...nextModelById.values()])
+    return {
+      ...currentProvider,
+      status: models.length > 0 ? 'healthy' : 'empty',
+      models,
+    }
+  })
 }
 
 function toProviderResult(provider: RefreshJobProvider): ProviderResult {
