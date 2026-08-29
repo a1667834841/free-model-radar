@@ -35,7 +35,7 @@
   },
   "triggers": {
     "crons": [
-      "*/10 * * * *"
+      "*/30 * * * *"
     ]
   },
   "observability": {
