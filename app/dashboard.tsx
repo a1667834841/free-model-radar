@@ -12,7 +12,9 @@ import TrendAnalysis from './components/trends/trend-analysis'
 import type { ProviderResult, ModelResult } from '@/domain/result'
 import type { TrendResponse } from '@/domain/trend'
 import {
+  DEFAULT_EVALUATION_METHOD_ID,
   findFastestTtftModel,
+  getEvaluationMethod,
   resolveStreamingMetrics,
 } from '@/domain/evaluation'
 import type { RefreshStatus } from '@/domain/refresh'
@@ -104,6 +106,8 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
     try { localStorage.setItem('model-eval-view', view) } catch { /* ignore */ }
   }
 
+  const evaluationMethod = useMemo(() => getEvaluationMethod(DEFAULT_EVALUATION_METHOD_ID), [])
+  const liveRankedModels = useMemo(() => evaluationMethod.rank(models), [evaluationMethod, models])
   const fastestTtftModel = useMemo(() => findFastestTtftModel(models), [models])
   const fastestModel = useMemo(() => {
     if (!fastestTtftModel) return null
@@ -407,7 +411,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
       </div>
 
       <div className={`view ${pageView === 'trends' ? 'active' : ''}`}>
-        <TrendAnalysis trends={trends} />
+        <TrendAnalysis trends={trends} liveModels={liveRankedModels} />
       </div>
 
       {refreshStatus.error && (
