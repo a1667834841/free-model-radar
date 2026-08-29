@@ -390,6 +390,54 @@ describe('mock provider refresh', () => {
     expect(sent).toHaveLength(0)
   })
 
+  it('probes a model when health state is fresh but no cached result exists', async () => {
+    const kv = new MemoryKV()
+    await kv.put('providers-config', JSON.stringify({
+      version: 1,
+      updatedAt: '2026-08-27T09:00:00.000Z',
+      providers: [{
+        id: 'provider-a',
+        name: 'Provider A',
+        baseUrl: 'https://api.example.com/v1',
+        secretName: 'PROVIDER_A_KEY',
+        enabled: true,
+        modelStrategy: 'free-first',
+        freeKeywords: ['free'],
+        probe: { maxModels: 20, concurrency: 1, attempts: 1, timeoutMs: 10000 },
+      }],
+    }))
+    await kv.put('latest-results', JSON.stringify({
+      updatedAt: '2026-08-27T09:00:00.000Z',
+      refreshId: 'previous-refresh',
+      providers: [{
+        id: 'provider-a',
+        name: 'Provider A',
+        baseUrl: 'https://api.example.com/v1',
+        secretName: 'PROVIDER_A_KEY',
+        status: 'empty',
+        models: [],
+      }],
+    }))
+    await kv.put('model-health-state', JSON.stringify(recordModelSuccess({}, 'provider-a', 'free-model', new Date().toISOString())))
+
+    const env = { RADAR_KV: kv as unknown as KVNamespace, PROVIDER_A_KEY: 'key' } satisfies RadarEnv
+    const probedModels: string[] = []
+    const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString()
+      if (url.endsWith('/models')) {
+        return new Response(JSON.stringify({ data: [{ id: 'free-model' }] }), { status: 200 })
+      }
+      probedModels.push((JSON.parse(String(init?.body)) as { model: string }).model)
+      return streamingProbeResponse()
+    }
+
+    await runRefresh(env, 'refresh-missing-cache', fetchImpl as typeof fetch)
+
+    const latestResults = JSON.parse((await kv.get('latest-results')) ?? 'null')
+    expect(probedModels).toEqual(['free-model'])
+    expect(latestResults.providers[0].models).toHaveLength(1)
+  })
+
   it('keeps previous successful results when a model is not due for probing', async () => {
     const kv = new MemoryKV()
     await kv.put('providers-config', JSON.stringify({

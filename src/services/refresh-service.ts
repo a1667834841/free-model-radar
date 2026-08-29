@@ -256,9 +256,11 @@ async function createRefreshJob(
     const t = Date.now()
     try {
       const apiKey = getSecret(env, provider.secretName)
+      const latestResults = await getLatestResults(env.RADAR_KV)
+      const cachedModelIds = new Set(latestResults?.providers.find((resultProvider) => resultProvider.id === provider.id)?.models.map((model) => model.id) ?? [])
       const discoveredModels = await discoverModels(provider, apiKey, fetchImpl)
       const visibleModels = discoveredModels.filter((model) => !isModelHidden(healthState, provider.id, model.id))
-      const dueModels = visibleModels.filter((model) => isModelDueForProbe(healthState, provider.id, model.id))
+      const dueModels = visibleModels.filter((model) => !cachedModelIds.has(model.id) || isModelDueForProbe(healthState, provider.id, model.id))
       const selectedModels = selectModelsForProbe(provider, dueModels)
       jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, secretName: provider.secretName, models: selectedModels, cursor: 0, successfulModels: [], trendSamples: [] })
       log(refreshId, 'discover: ok', { provider: provider.id, discovered: discoveredModels.length, visible: visibleModels.length, due: dueModels.length, selected: selectedModels.length, tookMs: Date.now() - t })
