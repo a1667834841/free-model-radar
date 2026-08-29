@@ -407,7 +407,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
       </div>
 
       <div className={`view ${pageView === 'trends' ? 'active' : ''}`}>
-        <TrendAnalysis trends={trends} providerColors={providerColors} />
+        <TrendAnalysis trends={trends} />
       </div>
 
       {refreshStatus.error && (

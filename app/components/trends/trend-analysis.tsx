@@ -9,7 +9,6 @@ import type { ModelTrendStats, TrendMetricKey, TrendResponse, TrendSample } from
 
 type TrendAnalysisProps = {
   trends: TrendResponse
-  providerColors: Record<string, string>
 }
 
 type MetricOption = {
@@ -77,11 +76,6 @@ function formatPercent(value: number): string {
 }
 
 /** x 轴刻度标签：短窗口用 HH:00，长窗口用 MM-DD（设计稿 L953-958 的时间语义适配版）。 */
-function formatTickLabel(ts: number, rangeDays: number): string {
-  const d = new Date(ts)
-  if (rangeDays <= 1) return `${String(d.getHours()).padStart(2, '0')}:00`
-  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 function formatClock(ts: number): string {
   const d = new Date(ts)
@@ -101,7 +95,7 @@ function stabilityClass(successRate: number): string {
   return 'bad'
 }
 
-export default function TrendAnalysis({ trends, providerColors }: TrendAnalysisProps) {
+export default function TrendAnalysis({ trends }: TrendAnalysisProps) {
   const { t } = useI18n()
   const [metric, setMetric] = useState<TrendMetricKey>('ttftMs')
   // 图例隐藏状态提升到此处：跨指标切换保留（设计稿 hidden 为模块级，不随 dim 重置）
@@ -127,13 +121,16 @@ export default function TrendAnalysis({ trends, providerColors }: TrendAnalysisP
     })
   }, [metric, option.lowerIsBetter, trends.modelStats])
 
-  const topModel = rankedModels[0] ?? null
+  // 设计稿 models.slice(0, 10)：趋势视图只展示前十模型
+  const topModels = useMemo(() => rankedModels.slice(0, CHART_SERIES_LIMIT), [rankedModels])
+
+  const topModel = topModels[0] ?? null
   const mostStableModel = useMemo(() => {
-    return [...trends.modelStats].sort((a, b) => {
+    return [...topModels].sort((a, b) => {
       if (a.successRate !== b.successRate) return b.successRate - a.successRate
       return compareMetricValues(a.p95.ttftMs, b.p95.ttftMs, true)
     })[0] ?? null
-  }, [trends.modelStats])
+  }, [topModels])
 
   if (trends.samples.length === 0) {
     return (
@@ -177,7 +174,7 @@ export default function TrendAnalysis({ trends, providerColors }: TrendAnalysisP
         />
         <TrendSummaryCard
           label={t('trend.summary.models')}
-          value={trends.modelStats.length}
+          value={topModels.length}
           detail={t('trend.summary.samples', { count: trends.samples.length })}
           tone="amber"
         />
@@ -205,13 +202,11 @@ export default function TrendAnalysis({ trends, providerColors }: TrendAnalysisP
           title={t(option.titleKey)}
           subtitle={t('trend.chart.allModelsSub')}
           samples={trends.samples}
-          models={rankedModels}
+          models={topModels}
           metric={metric}
-          providerColors={providerColors}
           hidden={hidden}
           onToggleModel={toggleModel}
           rangeDays={trends.rangeDays}
-          globalScale
         />
       ) : (
         <div className="trend-pending">
@@ -221,56 +216,7 @@ export default function TrendAnalysis({ trends, providerColors }: TrendAnalysisP
         </div>
       )}
 
-      <TrendStatsTable key={metric} models={rankedModels} metric={metric} option={option} />
-
-      <section className="provider-trend-section">
-        <div className="section-header">
-          <div>
-            <span className="section-kicker">{t('trend.provider.title')}</span>
-            <span className="section-hint">{t('trend.provider.sub')}</span>
-          </div>
-        </div>
-        <div className="provider-trend-list">
-          {trends.providers.map((provider) => (
-            <details className="provider-trend-card" key={provider.providerId}>
-              <summary>
-                <span className="provider-trend-name">
-                  <span className="overview-dot" style={{ background: providerColors[provider.providerId] ?? '#5FB8CE' }} />
-                  {provider.providerName}
-                </span>
-                <span className="provider-trend-stat">
-                  {t('trend.provider.models', { count: provider.stats.modelCount })}
-                </span>
-                <span className="provider-trend-stat">
-                  {t('trend.table.median')} {formatMetric(provider.stats.median[metric], metric)} {provider.stats.median[metric] == null ? '' : option.unit}
-                </span>
-                <span className={`stability-pill ${stabilityClass(provider.stats.successRate)}`}>
-                  {formatPercent(provider.stats.successRate)}
-                </span>
-              </summary>
-              {canShowTrendCharts ? (
-                <TrendChart
-                  title={`${provider.providerName} · ${t(option.labelKey)}`}
-                  subtitle={t('trend.chart.providerSub')}
-                  samples={trends.samples.filter((sample) => sample.providerId === provider.providerId)}
-                  models={provider.models}
-                  metric={metric}
-                  providerColors={providerColors}
-                  hidden={hidden}
-                  onToggleModel={toggleModel}
-                  rangeDays={trends.rangeDays}
-                />
-              ) : (
-                <div className="trend-pending provider-pending">
-                  <strong>{t('trend.pending.title')}</strong>
-                  <span>{t('trend.pending.desc', { count: sampledDayCount })}</span>
-                  <AccumMeter days={sampledDayCount} />
-                </div>
-              )}
-            </details>
-          ))}
-        </div>
-      </section>
+      <TrendStatsTable key={metric} models={topModels} metric={metric} option={option} />
     </section>
   )
 }
@@ -322,7 +268,7 @@ function TrendStatsTable({ models, metric, option }: {
         <span>{t('trend.table.success')}</span>
         <span>{t('trend.table.current')}</span>
       </div>
-      {models.slice(0, 40).map((model) => (
+      {models.map((model) => (
         <div className="trend-row" key={modelKey(model)}>
           <span className="trend-model-name">{model.modelId}</span>
           <span>{model.providerName}</span>
@@ -359,7 +305,6 @@ type ChartSeries = {
   color: string
   pts: ChartPoint[]
   valueByTime: Map<number, number>
-  failures: TrendSample[]
 }
 
 /* 图表渲染参数对齐设计稿 L926：viewBox 780×320，padL=56 / padR=20 / padT=22 / padB=40 */
@@ -367,24 +312,31 @@ const CHART_W = 780
 const CHART_H = 320
 const CHART_PAD = { top: 22, right: 20, bottom: 40, left: 56 }
 
-function TrendChart({ title, subtitle, samples, models, metric, providerColors, hidden, onToggleModel, rangeDays, globalScale = false }: {
+/** 设计稿 L865-869：按模型（非厂商）取色，最多 10 条曲线。 */
+const SERIES_COLORS = [
+  'var(--lat-fast)', 'var(--cyan)', 'var(--accent)', 'var(--purple)', 'var(--lat-mid)',
+  'var(--prov-bai)', 'var(--lat-slow)', 'color-mix(in oklch, var(--cyan) 55%, var(--accent))',
+  'color-mix(in oklch, var(--green) 50%, var(--cyan))', 'color-mix(in oklch, var(--purple) 55%, var(--accent))',
+]
+const CHART_SERIES_LIMIT = 10
+const HOUR_LABELS = ['00', '03', '06', '09', '12', '15', '18', '21', '23']
+
+function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggleModel, rangeDays }: {
   title: string
   subtitle: string
   samples: TrendSample[]
   models: ModelTrendStats[]
   metric: TrendMetricKey
-  providerColors: Record<string, string>
   hidden: Set<string>
   onToggleModel: (key: string) => void
   rangeDays: number
-  globalScale?: boolean
 }) {
   const { t } = useI18n()
   const option = getMetricOption(metric)
   const [hover, setHover] = useState<{ index: number; bestKey: string | null } | null>(null)
 
   const series = useMemo<ChartSeries[]>(() => {
-    return models.map((model) => {
+    return models.map((model, index) => {
       const key = modelKey(model)
       const modelSamples = samples.filter((sample) => sampleKey(sample) === key)
       const pts: ChartPoint[] = []
@@ -401,13 +353,12 @@ function TrendChart({ title, subtitle, samples, models, metric, providerColors, 
       return {
         key,
         model,
-        color: providerColors[model.providerId] ?? '#5FB8CE',
+        color: SERIES_COLORS[index % SERIES_COLORS.length],
         pts,
         valueByTime,
-        failures: modelSamples.filter((sample) => sample.status !== 'ok'),
       }
     })
-  }, [models, samples, metric, providerColors])
+  }, [models, samples, metric])
 
   const visibleSeries = useMemo(() => series.filter((item) => !hidden.has(item.key)), [series, hidden])
 
@@ -438,13 +389,17 @@ function TrendChart({ title, subtitle, samples, models, metric, providerColors, 
 
   const plotW = CHART_W - CHART_PAD.left - CHART_PAD.right
   const plotH = CHART_H - CHART_PAD.top - CHART_PAD.bottom
-  const minTime = times.length ? times[0] : Date.now()
-  const maxTime = times.length ? times[times.length - 1] : minTime + 60 * 60 * 1000
-  const xSpan = Math.max(maxTime - minTime, 1)
   const ySpan = Math.max(maxV - minV, 1)
+  const timeIndex = useMemo(() => new Map(times.map((time, index) => [time, index])), [times])
+  const lastIndex = Math.max(times.length - 1, 1)
+
+  // 设计稿按采样点均匀铺满 x 轴（xAt(i)），而不是按真实时间间隔拉伸。
+  function xAt(index: number): number {
+    return CHART_PAD.left + (plotW * index) / lastIndex
+  }
 
   function x(time: number): number {
-    return CHART_PAD.left + ((time - minTime) / xSpan) * plotW
+    return xAt(timeIndex.get(time) ?? 0)
   }
 
   function y(value: number): number {
@@ -462,16 +417,8 @@ function TrendChart({ title, subtitle, samples, models, metric, providerColors, 
       setHover(null)
       return
     }
-    const timeAtX = minTime + ((sx - CHART_PAD.left) / plotW) * xSpan
-    let index = 0
-    let bestDt = Infinity
-    for (let i = 0; i < times.length; i += 1) {
-      const dt = Math.abs(times[i] - timeAtX)
-      if (dt < bestDt) {
-        bestDt = dt
-        index = i
-      }
-    }
+    const rawIndex = ((sx - CHART_PAD.left) / plotW) * lastIndex
+    const index = Math.max(0, Math.min(times.length - 1, Math.round(rawIndex)))
     const time = times[index]
     let bestKey: string | null = null
     let bestDy = Infinity
@@ -510,14 +457,11 @@ function TrendChart({ title, subtitle, samples, models, metric, providerColors, 
     return key === hover.bestKey ? 1 : 0.28
   }
 
-  // x 轴刻度：均匀取点，密度 5-9 个（设计稿 9 个 HH:00 标签的时间语义适配）
-  const tickIndices = useMemo(() => {
-    if (times.length === 0) return []
-    const wanted = Math.min(times.length, 9)
-    return Array.from(new Set(
-      Array.from({ length: wanted }, (_, k) => Math.round((k * (times.length - 1)) / Math.max(wanted - 1, 1))),
-    ))
-  }, [times])
+  // x 轴刻度对齐设计稿：固定 00/03/.../23 的 9 个小时标签。
+  const tickLabels = useMemo(() => HOUR_LABELS.map((hour) => ({
+    hour,
+    index: Math.round((Number.parseInt(hour, 10) / 23) * lastIndex),
+  })), [lastIndex])
 
   let crossX: number | null = null
   let crossY: number | null = null
@@ -536,26 +480,23 @@ function TrendChart({ title, subtitle, samples, models, metric, providerColors, 
   }
 
   return (
-    <div className="trend-chart-card">
-      <div className="trend-chart-head">
+    <div className="chart-card">
+      <div className="chart-head">
         <div>
           <strong>{title}</strong>
           <span>{subtitle}</span>
         </div>
-        <span className="trend-chart-scale">{t(globalScale ? 'trend.scale.global' : 'trend.scale.local')}</span>
+        <span className="range-chip">{t('trend.scale.global')}</span>
       </div>
-      <div className="trend-chart-scroll">
-        <div className="chart-cover">
+      <div className="chart-cover">
           <svg
-            className="trend-chart"
+            className="trend-chart chart-anim"
             viewBox={`0 0 ${CHART_W} ${CHART_H}`}
             role="img"
             aria-label={title}
             onMouseMove={handleMouseMove}
             onMouseLeave={() => setHover(null)}
           >
-            <line x1={CHART_PAD.left} y1={CHART_PAD.top} x2={CHART_PAD.left} y2={CHART_H - CHART_PAD.bottom} className="chart-axis" />
-            <line x1={CHART_PAD.left} y1={CHART_H - CHART_PAD.bottom} x2={CHART_W - CHART_PAD.right} y2={CHART_H - CHART_PAD.bottom} className="chart-axis" />
             {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
               const gridY = CHART_PAD.top + ratio * plotH
               const labelValue = maxV - ratio * ySpan
@@ -563,23 +504,27 @@ function TrendChart({ title, subtitle, samples, models, metric, providerColors, 
                 <g key={ratio}>
                   <line x1={CHART_PAD.left} y1={gridY} x2={CHART_W - CHART_PAD.right} y2={gridY} className="chart-grid" />
                   <text x={CHART_PAD.left - 9} y={gridY + 3} className="chart-label" textAnchor="end">
-                    {formatMetric(labelValue, metric)}
+                    {Math.round(labelValue)}
                   </text>
                 </g>
               )
             })}
-            {tickIndices.map((index) => (
+            {tickLabels.map(({ hour, index }) => (
               <text
-                key={times[index]}
-                x={x(times[index])}
+                key={hour}
+                x={xAt(index)}
                 y={CHART_H - CHART_PAD.bottom + 18}
                 className="chart-label"
                 textAnchor="middle"
               >
-                {formatTickLabel(times[index], rangeDays)}
+                {`${hour}:00`}
               </text>
             ))}
-            {visibleSeries.map((item) => {
+            <line x1={CHART_PAD.left} y1={CHART_PAD.top} x2={CHART_PAD.left} y2={CHART_H - CHART_PAD.bottom} className="chart-axis" />
+            <line x1={CHART_PAD.left} y1={CHART_H - CHART_PAD.bottom} x2={CHART_W - CHART_PAD.right} y2={CHART_H - CHART_PAD.bottom} className="chart-axis" />
+            <rect x={CHART_PAD.left} y={CHART_PAD.top} width={plotW} height={plotH} fill="transparent" />
+            {/* 设计稿 L965：best（越低越好的最优曲线）最后绘制、叠在最上层 */}
+            {[...visibleSeries].reverse().map((item) => {
               const points = item.pts.map((point) => `${x(point.t).toFixed(1)},${y(point.v).toFixed(1)}`)
               const last = item.pts[item.pts.length - 1]
               return (
@@ -610,17 +555,7 @@ function TrendChart({ title, subtitle, samples, models, metric, providerColors, 
                       style={{ opacity: seriesEndOpacity(item.key) }}
                     />
                   ) : null}
-                  {item.failures.map((sample) => (
-                    <circle
-                      key={`${item.key}:${sample.checkedAt}:${sample.status}`}
-                      cx={x(new Date(sample.checkedAt).getTime())}
-                      cy={CHART_H - CHART_PAD.bottom}
-                      r="3"
-                      className="chart-failure-dot"
-                    >
-                      <title>{`${item.model.modelId} ${sample.status}`}</title>
-                    </circle>
-                  ))}
+
                 </g>
               )
             })}
@@ -655,22 +590,21 @@ function TrendChart({ title, subtitle, samples, models, metric, providerColors, 
               ))}
             </div>
           ) : null}
-        </div>
       </div>
-      <div className="trend-legend">
-        {models.map((model) => {
+      <div className="chart-legend">
+        {models.map((model, index) => {
           const key = modelKey(model)
           const isHidden = hidden.has(key)
           return (
             <button
               key={key}
               type="button"
-              className={`trend-legend-item ${isHidden ? 'muted' : ''}`}
+              className={`legend-item ${isHidden ? 'off' : ''}`}
               onClick={() => onToggleModel(key)}
               aria-pressed={!isHidden}
               title={model.modelId}
             >
-              <span style={{ '--series-color': providerColors[model.providerId] ?? '#5FB8CE' } as CSSProperties} />
+              <i style={{ '--series': SERIES_COLORS[index % SERIES_COLORS.length] } as CSSProperties} />
               {model.modelId}
             </button>
           )
