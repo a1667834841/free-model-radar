@@ -143,8 +143,30 @@ function providerKey(sample: Pick<TrendSample, 'providerId'>): string {
   return sample.providerId
 }
 
-export function createTrendResponse(samples: TrendSample[], rangeDays: number, generatedAt = new Date().toISOString()): TrendResponse {
-  const sortedSamples = [...samples].sort((a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime())
+/** 每模型每天只保留最近 `limit` 条样本，用于控制图表用样本的体积。 */
+export function limitSamplesPerDayPerModel(samples: TrendSample[], limit: number): TrendSample[] {
+  const groups = new Map<string, TrendSample[]>()
+  for (const sample of samples) {
+    const key = `${modelKey(sample)}|${sample.checkedAt.slice(0, 10)}`
+    const list = groups.get(key)
+    if (list) list.push(sample)
+    else groups.set(key, [sample])
+  }
+  const kept: TrendSample[] = []
+  for (const list of groups.values()) {
+    const start = Math.max(0, list.length - limit)
+    for (let i = start; i < list.length; i += 1) kept.push(list[i])
+  }
+  kept.sort((a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime())
+  return kept
+}
+
+export function createTrendResponse(samples: TrendSample[], rangeDays: number, generatedAt = new Date().toISOString(), activeModelKeys?: Set<string>, perModelPerDayLimit = 24): TrendResponse {
+  // 只保留「会进图表/表格」的活跃模型样本，剔除已消失模型，避免 payload 爆炸。
+  const baseSamples = activeModelKeys && activeModelKeys.size > 0
+    ? samples.filter((sample) => activeModelKeys.has(modelKey(sample)))
+    : samples
+  const sortedSamples = [...baseSamples].sort((a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime())
   const byModel = new Map<string, TrendSample[]>()
   const byProvider = new Map<string, TrendSample[]>()
 
@@ -222,7 +244,7 @@ export function createTrendResponse(samples: TrendSample[], rangeDays: number, g
     rangeDays,
     generatedAt,
     bucketDates: Array.from(new Set(sortedSamples.map((sample) => sample.checkedAt.slice(0, 10)))),
-    samples: sortedSamples,
+    samples: limitSamplesPerDayPerModel(sortedSamples, perModelPerDayLimit),
     modelStats,
     providerStats,
     providers,

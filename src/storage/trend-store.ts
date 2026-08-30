@@ -1,8 +1,10 @@
-import { createTrendResponse, type DailyTrendBucket, type TrendResponse, type TrendSample } from '@/domain/trend'
+import { createTrendResponse, limitSamplesPerDayPerModel, type DailyTrendBucket, type TrendResponse, type TrendSample } from '@/domain/trend'
 import { KV_KEYS } from './kv-keys'
+import { getLatestResults } from './results-store'
 
 const TREND_RANGE_DAYS = 7
 const TREND_BUCKET_TTL_SECONDS = 10 * 24 * 60 * 60
+const TREND_SAMPLES_PER_MODEL_PER_DAY_LIMIT = 24
 
 function dateKey(date: string): string {
   return `${KV_KEYS.trendPrefix}${date}`
@@ -34,6 +36,17 @@ export async function getTrendBucket(kv: KVNamespace, date: string): Promise<Dai
 export async function appendTrendSamples(kv: KVNamespace, samples: TrendSample[]): Promise<void> {
   if (samples.length === 0) return
 
+  const latest = await getLatestResults(kv)
+  const activeModelKeys = new Set<string>()
+  for (const provider of latest?.providers ?? []) {
+    for (const model of provider.models) {
+      activeModelKeys.add(`${provider.id}:${model.id}`)
+    }
+  }
+  for (const sample of samples) {
+    activeModelKeys.add(`${sample.providerId}:${sample.modelId}`)
+  }
+
   const grouped = new Map<string, TrendSample[]>()
   for (const sample of samples) {
     const date = trendDateFromIso(sample.checkedAt)
@@ -42,10 +55,12 @@ export async function appendTrendSamples(kv: KVNamespace, samples: TrendSample[]
 
   for (const [date, dateSamples] of grouped) {
     const existing = await getTrendBucket(kv, date)
+    const mergedSamples = [...(existing?.samples ?? []), ...dateSamples]
+      .filter((sample) => activeModelKeys.has(`${sample.providerId}:${sample.modelId}`))
     const bucket: DailyTrendBucket = {
       version: 1,
       date,
-      samples: [...(existing?.samples ?? []), ...dateSamples],
+      samples: limitSamplesPerDayPerModel(mergedSamples, TREND_SAMPLES_PER_MODEL_PER_DAY_LIMIT),
     }
     await kv.put(dateKey(date), JSON.stringify(bucket), { expirationTtl: TREND_BUCKET_TTL_SECONDS })
     await kv.delete(dateKey(addDays(date, -8)))
@@ -56,5 +71,15 @@ export async function getTrendResponse(kv: KVNamespace, rangeDays = TREND_RANGE_
   const dates = recentTrendDates(rangeDays)
   const buckets = await Promise.all(dates.map((date) => getTrendBucket(kv, date)))
   const samples = buckets.flatMap((bucket) => bucket?.samples ?? [])
-  return createTrendResponse(samples, rangeDays)
+
+  // 只保留当前仍出现在 latest-results 里的活跃模型样本，剔除已消失模型，避免趋势 payload 膨胀。
+  const latest = await getLatestResults(kv)
+  const activeModelKeys = new Set<string>()
+  for (const provider of latest?.providers ?? []) {
+    for (const model of provider.models) {
+      activeModelKeys.add(`${provider.id}:${model.id}`)
+    }
+  }
+
+  return createTrendResponse(samples, rangeDays, new Date().toISOString(), activeModelKeys)
 }

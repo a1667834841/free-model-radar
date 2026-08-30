@@ -2,7 +2,6 @@ import { cookies, headers } from 'next/headers'
 import { isAdminSessionCookie } from '@/auth/admin-session'
 import { getRadarEnv } from '@/lib/cloudflare'
 import { getLatestResults, getRefreshStatus } from '@/storage/results-store'
-import { getTrendResponse } from '@/storage/trend-store'
 import { flattenProviderResults } from '@/domain/result'
 import { LanguageProvider } from './i18n'
 import Dashboard from './dashboard'
@@ -22,10 +21,9 @@ export default async function Page() {
   const cookieStore = await cookies()
   const headerStore = await headers()
   const isAdmin = await isAdminSessionCookie(cookieStore.toString(), env.REFRESH_ADMIN_TOKEN)
-  const [results, refreshStatus, trends] = await Promise.all([
+  const [results, refreshStatus] = await Promise.all([
     getLatestResults(env.RADAR_KV),
     getRefreshStatus(env.RADAR_KV),
-    getTrendResponse(env.RADAR_KV),
   ])
 
   // 当前访问请求经过的 Cloudflare 边缘节点地区（OpenNext 从 request.cf 注入）
@@ -49,7 +47,7 @@ export default async function Page() {
         updatedAt={updatedAt}
         isStale={isStale}
         refreshStatus={refreshStatus}
-        trends={trends}
+        trends={null}
         isAdmin={isAdmin}
         nodeGeo={nodeGeo}
       />

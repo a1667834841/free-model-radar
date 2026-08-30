@@ -64,4 +64,28 @@ describe('trend store', () => {
     expect(response.modelStats[0].p95.ttftMs).toBe(1000)
     expect(response.providerStats[0].successRate).toBe(0.75)
   })
+
+  it('filters trend response to active models while limiting chart samples per model per day', () => {
+    const activeSamples = Array.from({ length: 30 }, (_, index) => sample({
+      checkedAt: new Date(Date.UTC(2026, 7, 28, 0, index)).toISOString(),
+      modelId: 'active-model',
+      ttftMs: 100 + index,
+    }))
+    const staleSamples = [sample({ modelId: 'stale-model', checkedAt: '2026-08-28T12:00:00.000Z' })]
+
+    const response = createTrendResponse(
+      [...activeSamples, ...staleSamples],
+      7,
+      '2026-08-28T12:10:00.000Z',
+      new Set(['provider-a:active-model']),
+    )
+
+    expect(response.modelStats).toHaveLength(1)
+    expect(response.modelStats[0].modelId).toBe('active-model')
+    expect(response.modelStats[0].sampleCount).toBe(30)
+    expect(response.samples).toHaveLength(24)
+    expect(response.samples.every((item) => item.modelId === 'active-model')).toBe(true)
+    expect(response.samples[0].checkedAt).toBe('2026-08-28T00:06:00.000Z')
+    expect(response.samples.at(-1)?.checkedAt).toBe('2026-08-28T00:29:00.000Z')
+  })
 })

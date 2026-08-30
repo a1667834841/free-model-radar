@@ -27,7 +27,7 @@ type DashboardProps = {
   updatedAt: string | null
   isStale: boolean
   refreshStatus: RefreshStatus
-  trends: TrendResponse
+  trends: TrendResponse | null
   isAdmin: boolean
   nodeGeo: { city: string | null; country: string | null; region: string | null }
 }
@@ -93,6 +93,9 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
   const [pageView, setPageView] = useState<'overview' | 'trends'>('overview')
   const [modelView, setModelView] = useState<'ranking' | 'provider'>('ranking')
   const [hydrated, setHydrated] = useState(false)
+  const [trendData, setTrendData] = useState<TrendResponse | null>(trends)
+  const [trendLoading, setTrendLoading] = useState(false)
+  const [trendError, setTrendError] = useState<string | null>(null)
 
   // 视图选择持久化（设计稿 L810-831）：SSR 下只在 effect 内读 localStorage，首帧固定 overview
   useEffect(() => {
@@ -107,6 +110,28 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
     setPageView(view)
     try { localStorage.setItem('model-eval-view', view) } catch { /* ignore */ }
   }
+
+  useEffect(() => {
+    if (pageView !== 'trends' || trendData || trendLoading) return
+    let cancelled = false
+    setTrendLoading(true)
+    setTrendError(null)
+    fetch('/api/trends')
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return await response.json() as TrendResponse
+      })
+      .then((data) => {
+        if (!cancelled) setTrendData(data)
+      })
+      .catch((error) => {
+        if (!cancelled) setTrendError(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        if (!cancelled) setTrendLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [pageView, trendData, trendLoading])
 
   const evaluationMethod = useMemo(() => getEvaluationMethod(DEFAULT_EVALUATION_METHOD_ID), [])
   const liveRankedModels = useMemo(() => evaluationMethod.rank(models), [evaluationMethod, models])
@@ -414,7 +439,17 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
       </div>
 
       <div className={`view ${pageView === 'trends' ? 'active' : ''}`}>
-        <TrendAnalysis trends={trends} liveModels={liveRankedModels} />
+        {trendData ? (
+          <TrendAnalysis trends={trendData} liveModels={liveRankedModels} />
+        ) : (
+          <section className="trend-section">
+            <div className="empty-state trend-empty">
+              <span className="empty-icon">⌁</span>
+              <strong>{trendError ? '趋势加载失败' : '正在加载趋势'}</strong>
+              <span>{trendError ? trendError : '趋势数据会在打开此页签时按需加载。'}</span>
+            </div>
+          </section>
+        )}
       </div>
 
       {refreshStatus.error && (
