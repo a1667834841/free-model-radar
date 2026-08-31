@@ -1,25 +1,27 @@
 # Free Model Radar
 
-运行在 Cloudflare Workers 上的模型可用性与延迟雷达。
+A model availability and latency radar running on Cloudflare Workers.
 
-![Free Model Radar 首页截图](docs/screenshot.png)
+[简体中文](README.zh-CN.md)
 
-## 功能
+![Free Model Radar home page](docs/screenshot.png)
 
-- Provider 配置放 Cloudflare KV；
-- API Key 和管理员 Token 放 Cloudflare Secrets；
-- 自动调用 `/v1/models` 发现模型；
-- `free-first`：如果模型名包含 `free` / `:free`，优先只测试这些模型；
-- 如果 Provider 没有 free 命名模型，则回退完整测试当前发现到的全部模型；
-- 通过真实 `/chat/completions` Probe 判断可用性；
-- 只要 Probe 成功且返回有效内容，就按 FREE 记录延迟、Token 使用量；
-- Cron 每 1消失刷新；
-- 管理员通过 `/?admin_token=...` 进入后可手动刷新；
-- 连续 5 次失败的模型 ID 自动隐藏。
+## Features
 
-完整设计见：[`docs/design.md`](docs/design.md)。
+- Store provider configuration in Cloudflare KV.
+- Store API keys and the administrator token in Cloudflare Secrets.
+- Discover models automatically through `/v1/models`.
+- Use `free-first`: probe model IDs containing `free` or `:free` first, together with provider-specific free metadata where available.
+- When no free candidate exists, small model sets fall back to probing all discovered models; providers with structured free signals or large model sets skip the probe to avoid probing paid models.
+- Determine availability through real `/chat/completions` probes.
+- Record latency and token usage as FREE when a probe succeeds and returns valid content.
+- Refresh every 30 minutes through Cron.
+- Let administrators trigger a manual refresh through `/?admin_token=...`.
+- Hide model IDs after five consecutive failures.
 
-## 本地准备
+See [`docs/design.md`](docs/design.md) for the complete design.
+
+## Local setup
 
 ```bash
 npm install
@@ -27,22 +29,22 @@ cp config/providers.example.json config/providers.local.json
 cp .env.example .env.local
 ```
 
-编辑：
+Edit these files:
 
 ```text
 config/providers.local.json
 .env.local
 ```
 
-## Provider 配置
+## Provider configuration
 
-真实配置文件不提交 Git：
+The real configuration file is not committed to Git:
 
 ```text
 config/providers.local.json
 ```
 
-示例：
+Example:
 
 ```json
 {
@@ -68,19 +70,19 @@ config/providers.local.json
 }
 ```
 
-校验配置：
+Validate the configuration:
 
 ```bash
 npm run kv:validate
 ```
 
-推送配置到 KV：
+Push the configuration to KV:
 
 ```bash
 npm run kv:push
 ```
 
-从 KV 拉取配置：
+Pull the configuration from KV:
 
 ```bash
 npm run kv:pull
@@ -95,7 +97,7 @@ npx wrangler secret put PROVIDER_A_KEY
 
 ## KV
 
-`wrangler.jsonc` 中需要替换真实 KV Namespace ID：
+Replace the real KV namespace ID in `wrangler.jsonc`:
 
 ```jsonc
 {
@@ -108,7 +110,7 @@ npx wrangler secret put PROVIDER_A_KEY
 }
 ```
 
-## 开发命令
+## Development commands
 
 ```bash
 npm run dev
@@ -119,54 +121,59 @@ npm run preview
 npm run deploy
 ```
 
-## 管理员入口
+## Administrator access
 
-访问：
+Open:
 
 ```text
-/?admin_token=你的 REFRESH_ADMIN_TOKEN
+/?admin_token=your-REFRESH_ADMIN_TOKEN
 ```
 
-验证成功后会设置 `HttpOnly` Cookie，有效期 12 小时，并重定向到 `/`。
+After successful verification, the application sets an `HttpOnly` cookie that is valid for 12 hours and redirects to `/`.
 
-## 厂商免费规则
+## Provider free-tier rules
 
-当前 `config/providers.local.json` 中实际接入的 Provider 及其免费规则如下（本项目通过模型名匹配 `free` / `:free` 关键词来识别免费模型）：
+The following providers and free-tier rules are currently connected in `config/providers.local.json`. Free models are identified through model-ID keywords such as `free` and `:free`, as well as provider-specific metadata where available.
 
-| Provider | 免费规则简介 | 地址 |
-|----------|-------------|------|
-| **OpenRouter** | 免费层提供 25+ 个免费模型（`/:free` 后缀），速率限制 50 reqs/day，仅免费模型可免费调用 | [https://openrouter.ai/pricing](https://openrouter.ai/pricing) |
-| **Bynara (NaraRouter)** | Free 计划含多个免费模型（Agnes 2.5 Flash、GLM 5.3 Flash Free、MiniMax M3 Free 等），7M tokens/天、15 req/min，免费额度每日重置，无需信用卡 | [https://router.bynara.id](https://router.bynara.id) |
-| **SenseNova（商汤日日新）** | 提供日日新系列多模态模型，具体免费额度以官方平台文档为准 | [https://www.sensenova.cn](https://www.sensenova.cn) |
-| **B.AI** | 多模型聚合平台，部分模型限时免费（如 DeepSeek V4 Flash、Qwen3.8 Flash 等标记 Limited Free 的模型），支持法币/链上充值 | [https://b.ai](https://b.ai) |
+| Provider | Free-tier rule | Link |
+|----------|----------------|------|
+| **OpenRouter** | The free tier offers 25+ free models with the `:free` suffix. The limit is 50 requests/day, and only free models can be called for free. | [Pricing](https://openrouter.ai/pricing) |
+| **Bynara (NaraRouter)** | The Free plan includes several free models, including Agnes 2.5 Flash, GLM 5.3 Flash Free, and MiniMax M3 Free. It includes 7M tokens/day and 15 requests/minute; the quota resets daily and does not require a credit card. | [Router](https://router.bynara.id) |
+| **SenseNova** | Provides SenseNova multimodal models. Check the official platform documentation for the current free quota. | [Official site](https://www.sensenova.cn) |
+| **B.AI** | A multi-model aggregation platform with some temporarily free models, such as models marked Limited Free. Supports fiat and on-chain top-ups. | [Official site](https://b.ai) |
+| **RNTM (Runtime)** | Pay-as-you-go with no subscription. Provides free routes such as `freeopenrouter`, `glm-5.2`, and `minimax-m3` at $0/1M tokens. | [Official site](https://rntm.sh) |
+| **AIHubMix** | A multi-model aggregation platform offering 53 free models, including `coding-glm-5.3-free`, `gpt-5.5-free`, and `qwen3.6-plus-preview-free`. Limits and quota are subject to the official policy. | [Official site](https://aihubmix.com) |
+| **OpenCode ZEN** | The opencode.ai unified API gateway offers 7 free models, including `deepseek-v4-flash-free`, `hy3-free`, and `laguna-s-2.1-free`; some models have rate limits. | [Official site](https://opencode.ai) |
+| **GMI Cloud** | Offers two free models, `MiniMaxAI/MiniMax-M3` and `MiniMaxAI/MiniMax-M2.7`, identified through the `is_free` flag. | [Console](https://console.gmicloud.ai) |
+| **JustWoker** | A Claude relay service with four models: `claude-opus-5`, `claude-opus-5-thinking`, `claude-opus-4-8`, and `claude-opus-4-8-thinking`. These IDs have no `free` marker, so availability is detected through the fallback full-probe path. | [Registration](https://api.justwoker.icu/register?aff=BHmu) |
+| **ZenMux** | A multi-model aggregation platform with five zero-price models among 166 models, including `z-ai/glm-4.7-flash-free`, `z-ai/glm-4.6v-flash-free`, and `dots-studio/dots3-note-prev`. Some models require a positive account balance. | [Invitation](https://zenmux.ai/invite/DZSANY) |
+| **NVIDIA NIM** | Offers 13 Free Endpoint models, including `deepseek-v4-flash-0731`, `kimi-k3`, `nemotron-3-ultra`, and `muse-glimmer`; free endpoints have rate limits. | [Models](https://build.nvidia.com/models) |
+| **GoRouter** | An API relay service with four Claude Opus models. These IDs have no `free` marker, so availability is detected through the fallback full-probe path. | [Registration](https://gorouter.app/sign-up?aff=4q8W) |
+| **Token Harbor** | An OpenAI-compatible gateway with two free models among 19: `mimo-v2.5:free` and `deepseek-v4-flash:free`. The free quota is limited within a seven-day cycle and resets after the cycle or with a Pass subscription. | [Official site](https://tokenharbor.ai) |
+| **Groq Cloud** | Offers 14 models, including `openai/gpt-oss-20b` and `qwen/qwen3.8-27b`. These IDs have no `free` marker, so availability is detected through the fallback full-probe path; the free tier is rate-limited at roughly 14K requests/day. | [Console](https://console.groq.com) |
 
-| **RNTM (Runtime)** | 按量付费、无订阅，提供免费路由模型（`freeopenrouter`、`glm-5.2`、`minimax-m3` 等 Free route，$0/1M tokens），价格透明 | [https://rntm.sh](https://rntm.sh) |
-| **AIHubMix** | 多模型聚合平台，提供 53 个免费模型（`coding-glm-5.3-free`、`gpt-5.5-free`、`qwen3.6-plus-preview-free` 等，含 `free` 后缀命名），速率与免费额度以官方为准 | [https://aihubmix.com](https://aihubmix.com) |
-| **OpenCode ZEN** | opencode.ai 统一 API 网关，提供 7 个免费模型（`deepseek-v4-flash-free`、`hy3-free`、`laguna-s-2.1-free` 等），部分模型有速率限制 | [https://opencode.ai](https://opencode.ai) |
-
-> 免费规则可能随时变化，请以各厂商官网最新公告为准。
-```
+> Free-tier rules may change at any time. Check each provider's official website for the latest information.
 
 ## TODO
 
-- [x] **趋势图**：增加近 7 天窗口内每个模型的吞吐量、首字延迟（TTFT）、端到端延迟趋势图；累计到 2 天数据即可展示走势，便于观察模型性能随时间的变化。
-- [x] **Agent 配置导出**：新增「Agent 配置」页，导出各大 Agent 的模型配置信息，仅支持复制（不提供下载）。可复制当前免费模型的 ID，以及对应 Agent（Claude Code、Codex、OpenCode、Gemini CLI、Zed、Cursor）配置文件的格式。配置模板见 [`docs/agent-config-formats.md`](docs/agent-config-formats.md)。
+- [x] **Trend charts**: Add throughput, time-to-first-token (TTFT), and end-to-end latency trends for each model in a seven-day window. Trends appear after two days of data have accumulated.
+- [x] **Agent config export**: Add an Agent Config page that exports model configuration snippets for major Agents. The page supports copying only, not downloading. It can copy the current free model IDs and the format for Claude Code, Codex, OpenCode, Gemini CLI, Zed, and Cursor. See [`docs/agent-config-formats.md`](docs/agent-config-formats.md) for the templates.
 
-## 趋势数据存储
+## Trend data storage
 
-趋势数据继续使用 Cloudflare KV，不引入 D1。刷新任务完成后会按天追加原始采样：
+Trend data continues to use Cloudflare KV; D1 is not introduced. After a refresh completes, raw samples are appended to a daily bucket:
 
 ```text
 trend:YYYY-MM-DD
 ```
 
-每条采样记录包含 `providerId`、`providerName`、`modelId`、`checkedAt`、`status`、`ttftMs`、`tokensPerSec`、`latencyMs`。失败、不可用或缺失记录会保留 `status`，指标值使用 `null`，用于计算成功率并在趋势图中显示断点/失败点。
+Each sample contains `providerId`, `providerName`, `modelId`, `checkedAt`, `status`, `ttftMs`, `tokensPerSec`, and `latencyMs`. Failed, unavailable, or missing records retain their `status` and use `null` metric values so the system can calculate success rates and show gaps or failures in trend charts.
 
-前端读取近 7 天 bucket 后在服务端聚合平均值、中位数、P95 和成功率；当至少存在 2 个采样日期时展示趋势图。KV 中只保存原始数据，避免派生统计写死。
+The frontend reads the most recent seven daily buckets, then the server aggregates averages, medians, P95, and success rates. Trend charts appear once at least two sampled dates exist. Only raw data is stored in KV; derived statistics are calculated rather than persisted.
 
-## 注意事项
+## Notes
 
-当前项目使用 OpenNext Cloudflare 适配器：
+This project uses the OpenNext Cloudflare adapter:
 
 ```bash
 npm run build
@@ -174,4 +181,4 @@ npm run preview
 npm run deploy
 ```
 
-Cron 的业务入口在 `src/worker.ts`，其 `scheduled()` 会调用同一套 `runRefresh()`。实际部署前需要确认 OpenNext 生成的 Worker 是否已合并 `scheduled()` handler；如果没有，应使用单独 Cron Worker 绑定同一个 KV/Secrets 来运行 `src/worker.ts`。当前尚未执行真实 Cloudflare 部署冒烟测试。
+The Cron business entry point is `src/worker.ts`, whose `scheduled()` handler calls the same `runRefresh()` flow. Before deployment, verify that the Worker generated by OpenNext includes the `scheduled()` handler. If it does not, use a separate Cron Worker bound to the same KV namespace and Secrets to run `src/worker.ts`. A real Cloudflare deployment smoke test has not yet been performed.
