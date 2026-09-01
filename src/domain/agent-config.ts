@@ -32,6 +32,16 @@ function otherModels(ctx: AgentConfigContext): string[] {
   return ctx.modelIds.filter((id) => id !== ctx.modelId)
 }
 
+function orderedModels(ctx: AgentConfigContext): string[] {
+  return [ctx.modelId, ...otherModels(ctx)]
+}
+
+function overflowComment(models: string[], slotLimit: number): string {
+  if (models.length <= slotLimit) return ''
+  const overflow = models.slice(slotLimit)
+  return `\n// 超出 ${slotLimit} 个可配置槽位的模型（请手动切换）：\n//   ${overflow.join('\n//   ')}`
+}
+
 export const AGENT_OPTIONS: AgentOption[] = [
   {
     id: 'claude-code',
@@ -39,21 +49,23 @@ export const AGENT_OPTIONS: AgentOption[] = [
     configPath: '~/.claude/settings.json',
     compatibility: '需 Provider 支持 Anthropic Messages API（/v1/messages）',
     generate: (ctx, option) => {
-      const [alt1, alt2] = otherModels(ctx)
+      const models = orderedModels(ctx)
+      const [model, alt1, alt2] = models
       const env = [
         `    "ANTHROPIC_BASE_URL": "${ctx.baseUrl}"`,
         `    "ANTHROPIC_AUTH_TOKEN": "${apiKeyPlaceholder(ctx.secretName)}"`,
-        `    "ANTHROPIC_MODEL": "${ctx.modelId}"`,
+        `    "ANTHROPIC_MODEL": "${model}"`,
       ]
       if (alt1) env.push(`    "ANTHROPIC_DEFAULT_MODEL": "${alt1}"`)
       // 顶层 model 字段优先级最高，作为第三个槽位（若存在第三个模型）
       const modelField = alt2 ? `,\n  "model": "${alt2}"` : ''
+      const overflow = overflowComment(models, 3)
       return `// 配置文件：~/.claude/settings.json（也可写 .claude/settings.local.json）
 // ${option.compatibility}
 // 将 ${apiKeyPlaceholder(ctx.secretName)} 替换为你的真实 Key。
 // 最多可同时配置 3 个免费模型（ANTHROPIC_MODEL / ANTHROPIC_DEFAULT_MODEL / 顶层 model，运行时按优先级取用）。
 // ANTHROPIC_BASE_URL 指向非 first-party 域时默认禁用 MCP tool search，
-// 可用 ENABLE_TOOL_SEARCH=true 开启。
+// 可用 ENABLE_TOOL_SEARCH=true 开启。${overflow}
 {
   "env": {
 ${env.join(',\n')}
@@ -126,9 +138,15 @@ export GEMINI_BASE_URL="${ctx.baseUrl}"`,
     id: 'zed',
     label: 'Zed',
     configPath: '~/.config/zed/settings.json',
-    compatibility: 'API Key 存系统 Keychain（Settings → AI → LLM），provider 用内建 id，对任意网关 base_url 支持有限',
+    compatibility: '支持自定义 OpenAI-compatible endpoint；API Key 存 Zed Keychain 或本地环境变量',
     generate: (ctx, option) => {
-      const [defaultModel, inline, commit, thread, sub] = [ctx.modelId, ...otherModels(ctx)]
+      const models = orderedModels(ctx)
+      const [defaultModel, inline, commit, thread, sub] = models
+      const availableModels = models.map((model) => `          {
+            "name": "${model}",
+            "display_name": "${model}",
+            "max_tokens": 1000000
+          }`)
       const entries = [
         ['default_model', defaultModel],
         ['inline_assistant_model', inline],
@@ -141,12 +159,22 @@ export GEMINI_BASE_URL="${ctx.baseUrl}"`,
       "model": "${model}"
     }`)
       return `// 配置文件：~/.config/zed/settings.json
-// ${option.compatibility}
-// 需先通过 Settings → AI → LLM 配置对应 Provider 的 Key。
-// 各模型槽位已按顺序填入免费模型（共 ${entries.length} 个），请按需替换。
+// ${option.compatibility}；自定义 Provider 使用 language_models.openai_compatible。
+// 请在 Zed 设置或本地环境中配置 ${ctx.secretName}，不要将 API Key 写入此文件。
+// available_models 已包含该 Provider 的全部模型；agent 下的功能槽位预填前 ${entries.length} 个模型。
 {
+  "language_models": {
+    "openai_compatible": {
+      "${ctx.providerId}": {
+        "api_url": "${ctx.baseUrl}",
+        "available_models": [
+${availableModels.join(',\n')}
+        ]
+      }
+    }
+  },
   "agent": {
-${body.join(',\n')}
+    ${body.join(',\n')}
   }
 }`
     },

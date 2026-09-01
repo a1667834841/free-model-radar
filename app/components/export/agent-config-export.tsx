@@ -99,7 +99,7 @@ export default function AgentConfigExport({ providers, models, exportTarget, cop
       option,
       content: option.generate(ctx, option),
     }))
-  }, [selectedProvider, activeModelId])
+  }, [selectedProvider, activeModelId, freeModels])
 
   const visibleConfigs = useMemo(() => {
     if (exportTarget === 'free-ids') return []

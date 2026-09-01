@@ -95,6 +95,7 @@ describe('agent config generation', () => {
       const capped = claude.generate(extraCtx, claude)
       expect(capped).toContain('"model": "c"')
       expect(capped).not.toContain('"model": "d"')
+      expect(capped).toContain('//   d')
     })
 
     it('fills zed model slots with as many free models as available', () => {
@@ -111,6 +112,39 @@ describe('agent config generation', () => {
       expect(content).toContain('"commit_message_model"')
       expect(content).toContain('"thread_summary_model"')
       expect(content).toContain('"subagent_model"')
+    })
+
+    it('lists all models in Zed\'s custom provider while filling feature slots', () => {
+      const zed = AGENT_OPTIONS.find((o) => o.id === 'zed')!
+      const zedCtx = makeAgentConfigContext({
+        providerId: 'openrouter',
+        providerName: 'OpenRouter',
+        modelId: 'm1',
+        modelIds: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'],
+      })
+      const content = zed.generate(zedCtx, zed)
+
+      expect(content).toContain('"openai_compatible"')
+      expect(content).toContain('"api_url": "<baseUrl>"')
+      expect(content).toContain('"name": "m6"')
+      expect(content).toContain('"display_name": "m6"')
+      expect(content).not.toContain('超出 5 个可配置槽位')
+    })
+
+    it('keeps all models in agents without a fixed slot limit', () => {
+      const unlimitedIds = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6']
+      const unlimitedCtx = makeAgentConfigContext({
+        providerId: 'openrouter',
+        providerName: 'OpenRouter',
+        modelId: 'm1',
+        modelIds: unlimitedIds,
+      })
+
+      for (const id of ['codex', 'opencode', 'gemini-cli', 'cursor']) {
+        const option = AGENT_OPTIONS.find((candidate) => candidate.id === id)!
+        const content = option.generate(unlimitedCtx, option)
+        expect(content).toContain('m6')
+      }
     })
   })
 })

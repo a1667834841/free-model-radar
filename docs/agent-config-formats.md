@@ -14,7 +14,7 @@
 | OpenAI Codex | `~/.codex/config.toml` | `.codex/config.toml` | **OpenAI Responses API** | ✅（必须支持 `/responses`） |
 | OpenCode | `~/.config/opencode/opencode.json` | `<项目>/opencode.json` | OpenAI Chat Completions（AI SDK openai-compatible） | ✅ 通用 |
 | Gemini CLI | `~/.gemini/settings.json` | `.gemini/settings.json` | Gemini API（generativelanguage） | ⚠️ 仅 Gemini 兼容端点 |
-| Zed | `~/.config/zed/settings.json` | — | 内建 provider（openai/anthropic/google/zed.dev 等） | ⚠️ key 存 keychain，provider 用内建 id |
+| Zed | `~/.config/zed/settings.json` | — | 自定义 OpenAI-compatible provider | ✅ 可配置全部模型；key 存 keychain 或本地环境变量 |
 | Cursor | 无标准配置文件 | — | 仅 GUI | ⚠️ 仅 GUI「Override Base URL」，不能写入模型 id |
 
 > 关键差异：**Codex 只支持 Responses wire，Claude Code 只支持 Anthropic wire**。因此导出配置时，必须按各 Agent 的 wire 格式挑选匹配的 Provider，否则无法调用。
@@ -157,7 +157,7 @@ export GEMINI_BASE_URL="<baseUrl>"
 ## 5. Zed
 
 - **配置路径**：`~/.config/zed/settings.json`（macOS 为 `~/Library/Application Support/Zed/settings.json`）。
-- **Wire 格式**：provider 为内建 id（`openai`、`anthropic`、`google`、`zed.dev`、`ollama` 等），API key 存**系统 keychain**，不写入 settings.json。
+- **Wire 格式**：支持自定义 OpenAI-compatible provider；API key 存**系统 keychain**或本地环境变量，不写入 settings.json。
 - **关键字段**（`agent` 对象下的各模型位）：
 
 | 字段 | 说明 |
@@ -173,16 +173,36 @@ export GEMINI_BASE_URL="<baseUrl>"
 ```json
 // ~/.config/zed/settings.json
 {
+  "language_models": {
+    "openai_compatible": {
+      "my-provider": {
+        "api_url": "https://example.com/v1",
+        "available_models": [
+          {
+            "name": "model-a",
+            "display_name": "model-a",
+            "max_tokens": 1000000
+          },
+          {
+            "name": "model-b",
+            "display_name": "model-b",
+            "max_tokens": 1000000
+          }
+        ]
+      }
+    }
+  },
   "agent": {
     "default_model": {
-      "provider": "openai",
-      "model": "<modelId>"
+      "provider": "my-provider",
+      "model": "model-a"
     }
   }
 }
 ```
 
-- ⚠️ Zed 对**自定义 OpenAI 兼容 base URL** 支持较弱（主要靠 Settings → AI → LLM 里的 API-access provider，key 存 keychain）。若要塞第三方免费模型，通常只能选内建 provider（openai/anthropic/google），或通过 `ollama` 等本地端点；对任意网关 base_url + 任意模型 id 的自由度低于 Claude Code / Codex / OpenCode。
+- `language_models.openai_compatible.<provider>.available_models` 可以列出多个模型；`agent` 下的 `default_model`、`inline_assistant_model` 等字段只是不同功能的默认选择，不代表模型总数上限。
+- API key 请通过 Zed 设置或对应 provider 生成的环境变量配置，不能写入 settings.json。
 
 ---
 
