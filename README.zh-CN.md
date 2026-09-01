@@ -6,20 +6,35 @@
 
 ![Free Model Radar 首页截图](docs/screenshot.png)
 
-## 功能
+## 厂商对比
 
-- Provider 配置放 Cloudflare KV；
-- API Key 和管理员 Token 放 Cloudflare Secrets；
-- 自动调用 `/v1/models` 发现模型；
-- `free-first`：优先测试模型名包含 `free` / `:free` 的模型，并在支持时使用 Provider 专用的免费元数据；
-- 如果没有免费候选，小模型集会回退为测试全部已发现模型；具有结构化免费标记的 Provider 或模型数量较大的 Provider 会跳过探测，以避免探测付费模型；
-- 通过真实 `/chat/completions` Probe 判断可用性；
-- 只要 Probe 成功且返回有效内容，就按 FREE 记录延迟、Token 使用量；
-- Cron 每 30 分钟刷新；
-- 管理员通过 `/?admin_token=...` 进入后可手动刷新；
-- 连续 5 次失败的模型 ID 自动隐藏。
+下面整理的是当前实际接入的 15 个厂商。
 
-完整设计见：[`docs/design.md`](docs/design.md)。
+- 模型目录数量来自项目的 `/v1/models` 探测快照。状态、可用模型和吞吐量来自线上 [`result` 接口](https://fm.ggball.top/api/results) 最新快照（`2026-09-01T15:32:08.550Z`）：沿用厂商概览逻辑，`models.length > 0` 表示**正常**；没有模型数据表示**无模型数据**。
+- 吞吐量由本项目通过有效的 `/chat/completions` Probe 实测，单位为 `token/s`。
+- 使用机制优先采用厂商当前官方文档；规则可能随账户、地区或服务策略变化。
+
+![实时厂商状态](https://fm.ggball.top/api/provider-status.svg)
+
+| 厂商 | 状态 | 可用模型 | 厂商最大吞吐量 | 使用机制 | 跳转 |
+|------|------|------------|------------------|----------|------|
+| **Groq Cloud** | 🟢 正常 | result：8 个模型——`qwen/qwen3.8-27b`、`openai/gpt-oss-safeguard-20b`、`openai/gpt-oss-20b`、`allam-2-7b`、`openai/gpt-oss-120b`、`groq/compound-mini`、`qwen/qwen3.6-27b`、`groq/compound` | 805.43 token/s | 无需签到；免费层按 RPM、RPD、TPM、TPD 限制，不是固定月度赠送额度。[速率限制](https://console.groq.com/docs/rate-limits) | [控制台](https://console.groq.com) |
+| **OpenRouter** | 🟢 正常 | result：5 个模型——`minimax/minimax-m3:free`、`nvidia/nemotron-3-nano-30b-a3b`、`openrouter/free`、`minimax/minimax-m2.5`、`~z-ai/glm-latest` | 206.45 token/s | 无需签到；免费模型通常每天 50 次请求，累计购买至少 $10 额度后提高到约 1000 次/天。[FAQ](https://openrouter.ai/docs/faq) | [官网](https://openrouter.ai) |
+| **RNTM** | 🟢 正常 | result：12 个模型——`lfm-2.5-2.6b`、`nemotron-3.5-content-safety`、`free`、`laguna-xs-2.1`、`minimax-m3`、`north-mini-code`、`nemotron-3-ultra-550b-a55b`、`dots-3-note-preview`、`nemotron-3-super-120b-a12b`、`minimax-m2.7`、`nemotron-3-nano-omni-30b-a3b-reasoning`、`nemotron-3.5-lightning` | 85.54 token/s | 无需签到，按量付费；新工作区可能包含 $5 免费额度，另一个 Starter 活动说明其额度 7 天后过期。[Quickstart](https://rntm.sh/docs/quickstart) · [Starter 活动](https://rntm.sh/offer) | [官网](https://rntm.sh) |
+| **NVIDIA NIM** | 🟢 正常 | result：10 个模型——`nvidia/nemotron-3.5-content-safety`、`google/diffusiongemma-26b-a4b-it`、`nvidia/riva-translate-4b-instruct-v2`、`nvidia/nemotron-3-ultra-550b-a55b`、`nvidia/ising-calibration-1.5-31b`、`poolside/laguna-xs-2.1`、`minimaxai/minimax-m3`、`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`、`nvidia/nemotron-3.5-lightning-30b-a3b`、`moonshotai/kimi-k3` | 70.74 token/s | 无需签到；Free Endpoint 有速率限制，未找到统一公开的固定日/月额度。[模型目录](https://build.nvidia.com/models) | [模型中心](https://build.nvidia.com/models) |
+| **B.AI** | 🟢 正常 | result：7 个模型——`qwen3.8-27b`、`hy3`、`deepseek-v4-flash`、`deepseek-v4-flash-vision-exp`、`minimax-m2.7`、`glm-5.3-flash`、`qwen3.8-flash` | 55.48 token/s | 无需签到；官方文档说明部分模型当前免费，使用量按 Token/积分计算。[计费与用量](https://docs.b.ai/zh-Hans/llmservice/pricing-and-usage/) | [注册](https://chat.b.ai/chat?invite_code=ATZT6T) |
+| **GMI Cloud** | 🟢 正常 | result：2 个模型——`MiniMaxAI/MiniMax-M3`、`MiniMaxAI/MiniMax-M2.7` | 45.21 token/s | 无需签到；部分模型由目录标记为免费，但未找到统一公开的固定日/月额度。[计费说明](https://docs.gmicloud.ai/inference-engine/billing/price) | [控制台](https://console.gmicloud.ai) |
+| **SenseNova** | 🟢 正常 | result：3 个模型——`deepseek-v4-pro`、`deepseek-v4-flash`、`glm-5.2` | 42.60 token/s | 未发现公开统一的签到或月度额度规则，具体以平台当前账户政策为准 | [官网](https://www.sensenova.cn) |
+| **ZenMux** | 🟢 正常 | result：2 个模型——`z-ai/glm-4.6v-flash-free`、`dots-studio/dots3-note-prev` | 26.74 token/s | 无需签到；Free 计划约 5 次 Flow/5 小时，仅支持 Studio Chat、不提供 API；API 需要 Starter 及以上订阅。[订阅说明](https://zenmux.ai/docs/guide/subscription.html) | [注册](https://zenmux.ai/invite/DZSANY) |
+| **JustWoker** | 🟢 正常 | result：4 个模型——`claude-opus-4-8`、`claude-opus-5`、`claude-opus-4-8-thinking`、`claude-opus-5-thinking` | 5.84 token/s | 第三方公开资料显示为注册额度 + 每日签到额度，具体金额需在站内复核。[第三方资料](https://github.com/panxunying/ai-coding-welfare) | [注册](https://api.justwoker.icu/register?aff=BHmu) |
+| **GoRouter** | 🟢 正常 | result：4 个模型——`claude-opus-5-thinking`、`claude-opus-4-8-thinking`、`claude-opus-4-8`、`claude-opus-5` | 5.76 token/s | 第三方资料显示存在每日签到，但额度未确认。[第三方资料](https://github.com/panxunying/ai-coding-welfare) | [注册](https://gorouter.app/sign-up?aff=4q8W) |
+| **AIHubMix** | 🔴 无模型数据 | result：0 个模型。目录：409 个模型、53 个免费候选；最近一次 Probe 命中未充值账户试用次数限制 | — | 无需签到；免费模型说明为无需信用卡、无试用到期时间，但按模型设置 RPM 和每日 Token 上限，每日重置。[免费模型说明](https://docs.aihubmix.com/en/blogs/free-ai-models) | [官网](https://aihubmix.com/?aff=FqPM) |
+| **AMD Radeon Cloud** | 🔴 无模型数据 | result：0 个模型。目录：4 个模型、1 个配置候选：`DeepSeek-V4-Flash` | — | 需要 AMD 开发者账号和 API key。当前目录返回 `free: false` 且价格为正；将目标模型视为免费前，应以当前账号的访问策略为准。 | [Radeon Cloud](https://developer.amd.com.cn/radeon) |
+| **Bynara** | 🔴 无模型数据 | result：0 个模型。目录：56 个模型、6 个免费候选，包括 `glm-5.3-flash-free`、`glm-5.3-free`、`mimo-v2.5-free` | — | 无需签到；免费层包含每分钟请求限制和每日 Token 配额，通常按 UTC 每日重置。[文档](https://router.bynara.id/docs) | [官网](https://router.bynara.id) |
+| **OpenCode ZEN** | 🔴 无模型数据 | result：0 个模型。目录：63 个模型、7 个免费候选；线上最新结果暂无可用模型 | — | 无需签到；免费模型属于限时开放，需登录并补充计费信息，其他模型按请求计费。[ZEN 文档](https://dev.opencode.ai/docs/zen/) | [官网](https://opencode.ai) |
+| **Token Harbor** | 🔴 无模型数据 | result：0 个模型。目录：19 个模型、2 个免费候选：`mimo-v2.5:free`、`deepseek-v4-flash:free` | — | 无需签到；免费额度按滚动 7 天周期、按价值计量；无注册赠金，无需信用卡。[FAQ](https://tokenharbor.ai/faq) | [官网](https://tokenharbor.ai) |
+
+> 吞吐量是本项目 Probe 实测值，不代表厂商承诺速度。免费模型、额度和账户要求可能随时变化。
 
 ## 本地准备
 
@@ -130,29 +145,6 @@ npm run deploy
 ```
 
 验证成功后会设置 `HttpOnly` Cookie，有效期 12 小时，并重定向到 `/`。
-
-## 厂商免费规则
-
-当前 `config/providers.local.json` 中实际接入的 Provider 及其免费规则如下（本项目通过模型名匹配 `free` / `:free` 关键词来识别免费模型）：
-
-| Provider | 免费规则简介 | 地址 |
-|----------|-------------|------|
-| **OpenRouter** | 免费层提供 25+ 个免费模型（`/:free` 后缀），速率限制 50 reqs/day，仅免费模型可免费调用 | [https://openrouter.ai/pricing](https://openrouter.ai/pricing) |
-| **Bynara (NaraRouter)** | Free 计划含多个免费模型（Agnes 2.5 Flash、GLM 5.3 Flash Free、MiniMax M3 Free 等），7M tokens/天、15 req/min，免费额度每日重置，无需信用卡 | [https://router.bynara.id](https://router.bynara.id) |
-| **SenseNova（商汤日日新）** | 提供日日新系列多模态模型，具体免费额度以官方平台文档为准 | [https://www.sensenova.cn](https://www.sensenova.cn) |
-| **B.AI** | 多模型聚合平台，部分模型限时免费（如 DeepSeek V4 Flash、Qwen3.8 Flash 等标记 Limited Free 的模型），支持法币/链上充值 | [https://b.ai](https://b.ai) |
-| **RNTM (Runtime)** | 按量付费、无订阅，提供免费路由模型（`freeopenrouter`、`glm-5.2`、`minimax-m3` 等 Free route，$0/1M tokens），价格透明 | [https://rntm.sh](https://rntm.sh) |
-| **AIHubMix** | 多模型聚合平台，提供 53 个免费模型（`coding-glm-5.3-free`、`gpt-5.5-free`、`qwen3.6-plus-preview-free` 等，含 `free` 后缀命名），速率与免费额度以官方为准 | [https://aihubmix.com](https://aihubmix.com) |
-| **OpenCode ZEN** | opencode.ai 统一 API 网关，提供 7 个免费模型（`deepseek-v4-flash-free`、`hy3-free`、`laguna-s-2.1-free` 等），部分模型有速率限制 | [https://opencode.ai](https://opencode.ai) |
-| **GMI Cloud** | GPU 算力平台，2 个免费模型（`MiniMaxAI/MiniMax-M3`、`MiniMaxAI/MiniMax-M2.7`），通过 `is_free` 标志识别 | [https://console.gmicloud.ai](https://console.gmicloud.ai) |
-| **JustWoker** | Claude 中转站，4 个模型（`claude-opus-5`、`claude-opus-5-thinking`、`claude-opus-4-8`、`claude-opus-4-8-thinking`），无 `free` 标记，靠回退全测识别可用模型 | [注册链接](https://api.justwoker.icu/register?aff=BHmu) |
-| **ZenMux** | 多模型聚合平台，166 个模型中 5 个零价模型（`z-ai/glm-4.7-flash-free`、`z-ai/glm-4.6v-flash-free`、`dots-studio/dots3-note-prev` 等），部分模型需要账户余额 > 0 | [邀请链接](https://zenmux.ai/invite/DZSANY) |
-| **NVIDIA NIM** | 提供 13 个 Free Endpoint 模型（`deepseek-v4-flash-0731`、`kimi-k3`、`nemotron-3-ultra`、`muse-glimmer` 等），免费端点有速率限制 | [https://build.nvidia.com/models](https://build.nvidia.com/models) |
-| **GoRouter** | New API 中转站，4 个 Claude Opus 模型（`claude-opus-5`、`claude-opus-5-thinking`、`claude-opus-4-8`、`claude-opus-4-8-thinking`），无 `free` 标记，靠回退全测识别可用模型 | [注册链接](https://gorouter.app/sign-up?aff=4q8W) |
-| **Token Harbor** | OpenAI 兼容网关，19 个模型中 2 个免费模型（`mimo-v2.5:free`、`deepseek-v4-flash:free`，以 `:free` 后缀命名），免费额度 7 天周期内限量，用尽后需等周期重置或订阅 Pass | [https://tokenharbor.ai](https://tokenharbor.ai) |
-| **Groq Cloud** | 提供 14 个模型（`openai/gpt-oss-20b`、`qwen/qwen3.8-27b` 等），无 `free` 标记，靠回退全测识别可用模型，免费层有速率限制（~14K req/day） | [https://console.groq.com](https://console.groq.com) |
-
-> 免费规则可能随时变化，请以各厂商官网最新公告为准。
 
 ## TODO
 
