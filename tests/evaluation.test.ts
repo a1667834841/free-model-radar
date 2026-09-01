@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeStreamingScore, findFastestTtftModel, getEvaluationMethod } from '@/domain/evaluation'
+import { computeStreamingScore, findFastestTtftModel, findModelBest, getEvaluationMethod } from '@/domain/evaluation'
 import type { FlattenedModel } from '@/domain/evaluation'
 
 function makeModel(overrides: Partial<FlattenedModel> & Pick<FlattenedModel, 'id' | 'providerId' | 'providerName'>): FlattenedModel {
@@ -85,6 +85,18 @@ describe('streaming performance evaluation', () => {
     ])
 
     expect(fastest).toEqual({ id: 'fastest-ttft', ttftMs: 120 })
+  })
+
+  it('finds best TTFT, TPS and E2E across providers', () => {
+    const best = findModelBest([
+      makeModel({ id: 'a', providerId: 'p1', providerName: 'P1', ttftMs: 200, tokensPerSec: 20, latencyMs: 300 }),
+      makeModel({ id: 'b', providerId: 'p1', providerName: 'P1', ttftMs: 150, tokensPerSec: 40, latencyMs: 500 }),
+      makeModel({ id: 'c', providerId: 'p2', providerName: 'P2', ttftMs: 250, tokensPerSec: 10, latencyMs: 120 }),
+    ])
+
+    expect(best.bestTtft).toEqual({ providerId: 'p1', id: 'b', value: 150 })
+    expect(best.bestTps).toEqual({ providerId: 'p1', id: 'b', value: 40 })
+    expect(best.bestE2e).toEqual({ providerId: 'p2', id: 'c', value: 120 })
   })
 })
 

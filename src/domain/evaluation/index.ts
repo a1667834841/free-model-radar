@@ -7,6 +7,10 @@ export type {
   RankedModel,
   TpsQuality,
 } from './types'
+export type {
+  ModelBestSummary,
+  ModelBestEntry,
+} from './summaries'
 export {
   estimateTokensFromContent,
   resolveStreamingMetrics,
@@ -19,4 +23,5 @@ export {
 } from './methods'
 export {
   findFastestTtftModel,
+  findModelBest,
 } from './summaries'

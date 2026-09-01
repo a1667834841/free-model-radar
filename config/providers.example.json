@@ -16,6 +16,159 @@
         "attempts": 1,
         "timeoutMs": 25000
       }
+    },
+    {
+      "id": "gmicloud",
+      "name": "GMI Cloud",
+      "baseUrl": "https://api.gmi-serving.com/v1",
+      "secretName": "GMICLOUD_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": [
+        "free",
+        ":free"
+      ],
+      "probe": {
+        "maxModels": 20,
+        "concurrency": 3,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
+    },
+    {
+      "id": "justwoker",
+      "name": "JustWoker",
+      "baseUrl": "https://api.justwoker.icu/v1",
+      "secretName": "JUSTWOKER_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": [
+        "free",
+        ":free"
+      ],
+      "probe": {
+        "maxModels": 20,
+        "concurrency": 3,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
+    },
+    {
+      "id": "zenmux",
+      "name": "ZenMux",
+      "baseUrl": "https://zenmux.ai/api/v1",
+      "secretName": "ZENMUX_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": [
+        "free",
+        ":free"
+      ],
+      "probe": {
+        "maxModels": 20,
+        "concurrency": 3,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA NIM",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "secretName": "NVIDIA_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": [
+        "kimi-k3",
+        "deepseek-v4-pro-0813",
+        "deepseek-v4-flash-0731",
+        "nemotron-3.5-lightning",
+        "muse-glimmer",
+        "riva-translate-4b-instruct-v2",
+        "ising-calibration",
+        "laguna-xs-2.1",
+        "minimax-m3",
+        "diffusiongemma-26b",
+        "nemotron-3-ultra",
+        "nemotron-3.5-content-safety",
+        "nemotron-3-nano-omni"
+      ],
+      "probe": {
+        "maxModels": 20,
+        "concurrency": 3,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
+    },
+    {
+      "id": "gorouter",
+      "name": "GoRouter",
+      "baseUrl": "https://gorouter.app/v1",
+      "secretName": "GOROUTER_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": [
+        "free",
+        ":free"
+      ],
+      "probe": {
+        "maxModels": 20,
+        "concurrency": 3,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
+    },
+    {
+      "id": "tokenharbor",
+      "name": "Token Harbor",
+      "baseUrl": "https://tokenharbor.ai/v1",
+      "secretName": "TOKENHARBOR_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": [
+        "free",
+        ":free"
+      ],
+      "probe": {
+        "maxModels": 20,
+        "concurrency": 3,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
+    },
+    {
+      "id": "groq",
+      "name": "Groq Cloud",
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "secretName": "GROQ_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": [
+        "free"
+      ],
+      "probe": {
+        "maxModels": 20,
+        "concurrency": 3,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
+    },
+    {
+      "id": "amd",
+      "name": "AMD Radeon Cloud",
+      "baseUrl": "https://developer.amd.com.cn/radeon/api/v1",
+      "secretName": "AMD_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": [
+        "deepseek-v4-flash"
+      ],
+      "probe": {
+        "maxModels": 1,
+        "concurrency": 1,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
     }
   ]
 }

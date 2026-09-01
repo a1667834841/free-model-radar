@@ -8,7 +8,10 @@ export type ModelPricing = {
 export type DiscoveredModel = {
   id: string
   pricing?: ModelPricing | null
+  /** 部分平台（如 zenmux）使用数组形式的 pricings 字段，保留原始结构供厂商专用判定。 */
+  pricings?: Record<string, Array<{ value?: unknown; unit?: unknown; currency?: unknown }>> | null
   hasFreeRoute?: boolean | null
+  isFree?: boolean | null
 }
 
 const FALLBACK_ALL_MODEL_LIMIT = 20
@@ -25,7 +28,22 @@ function isZeroPrice(value: string | number | null | undefined): boolean {
 }
 
 function hasProviderSpecificFreeSignal(provider: ProviderConfig): boolean {
-  return provider.id === 'openrouter' || provider.id === 'rntm'
+  return provider.id === 'openrouter' || provider.id === 'rntm' || provider.id === 'gmicloud' || provider.id === 'zenmux' || provider.id === 'nvidia'
+}
+
+function getFirstPricingValue(list: Array<{ value?: unknown; unit?: unknown; currency?: unknown }> | undefined): number | null {
+  if (!list || list.length === 0) return null
+  const first = list[0]?.value
+  return typeof first === 'number' ? first : null
+}
+
+function isZenmuxFreeModel(model: DiscoveredModel): boolean {
+  const pricings = model.pricings
+  if (!pricings) return false
+  const completion = getFirstPricingValue(pricings.completion)
+  const prompt = getFirstPricingValue(pricings.prompt)
+  // zenmux 对个别模型只标 completion、无 prompt 价格，此时仍按付费处理，避免误判。
+  return completion === 0 && prompt === 0
 }
 
 function isProviderSpecificFreeModel(provider: ProviderConfig, model: DiscoveredModel): boolean {
@@ -34,6 +52,10 @@ function isProviderSpecificFreeModel(provider: ProviderConfig, model: Discovered
       return isZeroPrice(model.pricing?.prompt) && isZeroPrice(model.pricing?.completion)
     case 'rntm':
       return model.hasFreeRoute === true
+    case 'gmicloud':
+      return model.isFree === true
+    case 'zenmux':
+      return isZenmuxFreeModel(model)
     default:
       return false
   }

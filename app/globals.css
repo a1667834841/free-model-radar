@@ -2156,6 +2156,7 @@ svg {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   min-width: 0;
   overflow: hidden;
   color: var(--fg);
@@ -2176,6 +2177,20 @@ svg {
   font-weight: 800;
   letter-spacing: .06em;
   padding: 2px 7px;
+}
+
+/* 三个性能指标的“最优”徽章：TTFT 绿（首字快）、TPS 蓝（吞吐高）、E2E 紫红（端到端快） */
+.m-badge-ttft {
+  background: color-mix(in oklch, var(--lat-fast) 18%, transparent);
+  color: var(--lat-fast);
+}
+.m-badge-tps {
+  background: color-mix(in oklch, var(--cyan) 24%, transparent);
+  color: var(--cyan);
+}
+.m-badge-e2e {
+  background: color-mix(in oklch, var(--purple) 26%, transparent);
+  color: var(--purple);
 }
 
 .m-prov {

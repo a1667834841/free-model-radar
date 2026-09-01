@@ -12,9 +12,10 @@ import type { ProviderResult } from '@/domain/result'
 import {
   DEFAULT_EVALUATION_METHOD_ID,
   estimateTokensFromContent,
-  findFastestTtftModel,
+  findModelBest,
   getEvaluationMethod,
   type FlattenedModel,
+  type ModelBestSummary,
   type RankedModel,
 } from '@/domain/evaluation'
 import { AGENT_OPTIONS } from '@/domain/agent-config'
@@ -63,7 +64,7 @@ export default function ModelEvaluation({
   const [copySignal, setCopySignal] = useState(0)
 
   const rankedModels = useMemo(() => method.rank(models), [models, method])
-  const fastestTtftModel = useMemo(() => findFastestTtftModel(models), [models])
+  const modelBest = useMemo(() => findModelBest(models), [models])
   const providerMeta = useMemo(() => {
     return Object.fromEntries(providers.map((provider) => [provider.id, provider]))
   }, [providers])
@@ -190,12 +191,16 @@ export default function ModelEvaluation({
       header: t('table.col.model'),
       cell: ({ row }) => {
         const model = row.original
+        const isBestTtft = modelBest.bestTtft?.providerId === model.providerId && modelBest.bestTtft?.id === model.id
+        const isBestTps = modelBest.bestTps?.providerId === model.providerId && modelBest.bestTps?.id === model.id
+        const isBestE2e = modelBest.bestE2e?.providerId === model.providerId && modelBest.bestE2e?.id === model.id
+        const showBadges = rankedModels.length > 1
         return (
           <span className="m-name">
             {model.id}
-            {fastestTtftModel?.id === model.id && rankedModels.length > 1 && (
-              <span className="m-badge">{t('badge.fastest')}</span>
-            )}
+            {showBadges && isBestTtft && <span className="m-badge m-badge-ttft">{t('badge.bestTtft')}</span>}
+            {showBadges && isBestTps && <span className="m-badge m-badge-tps">{t('badge.bestTps')}</span>}
+            {showBadges && isBestE2e && <span className="m-badge m-badge-e2e">{t('badge.bestE2e')}</span>}
           </span>
         )
       },
@@ -222,7 +227,7 @@ export default function ModelEvaluation({
                 />
               ) : null}
             </span>
-            {model.providerName}
+            {model.providerName || model.providerId}
           </>
         )
         return (
@@ -326,7 +331,7 @@ export default function ModelEvaluation({
         </span>
       ),
     }),
-  ]), [fastestTtftModel, providerColors, providerMeta, rankedModels.length, scoreMax, scoreMin, t, view])
+  ]), [modelBest, providerColors, providerMeta, rankedModels.length, scoreMax, scoreMin, t, view])
 
   const table = useTable({
     features: modelTableFeatures,

@@ -15,11 +15,15 @@ function parseModelsPayload(payload: unknown): DiscoveredModel[] {
       if (typeof id !== 'string' || !id.trim()) return null
 
       const pricing = (item as { pricing?: unknown }).pricing
+      const pricings = (item as { pricings?: unknown }).pricings
       const hasFreeRoute = (item as { has_free_route?: unknown }).has_free_route
+      const isFree = (item as { is_free?: unknown }).is_free
       const model: DiscoveredModel = {
         id,
         pricing: pricing && typeof pricing === 'object' ? pricing as DiscoveredModel['pricing'] : null,
+        pricings: pricings && typeof pricings === 'object' ? pricings as DiscoveredModel['pricings'] : null,
         hasFreeRoute: typeof hasFreeRoute === 'boolean' ? hasFreeRoute : null,
+        isFree: typeof isFree === 'boolean' ? isFree : null,
       }
       return model
     })

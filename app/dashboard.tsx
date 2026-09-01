@@ -272,7 +272,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
           </div>
           <div className="meter">
             <span className="meter-track"><span className="meter-fill accent" style={{ width: `${fastestMeterPct}%` }} /></span>
-            <span className="meter-note">{t('badge.fastest')} · {models.length} {t('metric.models')}</span>
+            <span className="meter-note">{t('metric.fastestTtft')} · {models.length} {t('metric.models')}</span>
           </div>
         </article>
         <MetricCard
@@ -356,10 +356,10 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
                         target="_blank"
                         rel="noreferrer"
                       >
-                        {p.name}
+                        {p.name || p.id}
                       </a>
                     ) : (
-                      <span className="prov-name">{p.name}</span>
+                      <span className="prov-name">{p.name || p.id}</span>
                     )}
                     <span className={`prov-status ${p.status}`}>{t(`status.${p.status}` as any)}</span>
                   </div>

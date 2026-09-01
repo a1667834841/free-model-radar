@@ -14,6 +14,14 @@ const PROVIDER_ICON_DOMAINS: Record<string, string> = {
   bynara: 'router.bynara.id',
   opencode: 'opencode.ai',
   rntm: 'rntm.sh',
+  justwoker: 'api.justwoker.icu',
+  gmicloud: 'console.gmicloud.ai/favicon.ico',
+  zenmux: 'zenmux.ai',
+  nvidia: 'build.nvidia.com/favicon.ico',
+  gorouter: 'gorouter.app',
+  tokenharbor: 'tokenharbor.ai',
+  groq: 'console.groq.com/favicon.ico',
+  amd: 'developer.amd.com.cn/favicon.ico',
 }
 
 /**
@@ -28,10 +36,18 @@ const PROVIDER_HOME_URLS: Record<string, string> = {
   openrouter: 'https://openrouter.ai',
   bynara: 'https://router.bynara.id',
   sensenova: 'https://www.sensenova.cn',
-  'b-ai': 'https://b.ai',
+  'b-ai': 'https://chat.b.ai/chat?invite_code=ATZT6T',
   rntm: 'https://rntm.sh',
-  aihubmix: 'https://aihubmix.com',
+  aihubmix: 'https://aihubmix.com/?aff=FqPM',
   opencode: 'https://opencode.ai',
+  justwoker: 'https://api.justwoker.icu/register?aff=BHmu',
+  gmicloud: 'https://console.gmicloud.ai',
+  zenmux: 'https://zenmux.ai/invite/DZSANY',
+  nvidia: 'https://build.nvidia.com/models',
+  gorouter: 'https://gorouter.app/sign-up?aff=4q8W',
+  tokenharbor: 'https://tokenharbor.ai',
+  groq: 'https://console.groq.com',
+  amd: 'https://developer.amd.com.cn/radeon',
 }
 
 export function normalizeProviderKey(value: string): string {
