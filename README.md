@@ -6,20 +6,35 @@ A model availability and latency radar running on Cloudflare Workers.
 
 ![Free Model Radar home page](docs/screenshot.png)
 
-## Features
+## Provider comparison
 
-- Store provider configuration in Cloudflare KV.
-- Store API keys and the administrator token in Cloudflare Secrets.
-- Discover models automatically through `/v1/models`.
-- Use `free-first`: probe model IDs containing `free` or `:free` first, together with provider-specific free metadata where available.
-- When no free candidate exists, small model sets fall back to probing all discovered models; providers with structured free signals or large model sets skip the probe to avoid probing paid models.
-- Determine availability through real `/chat/completions` probes.
-- Record latency and token usage as FREE when a probe succeeds and returns valid content.
-- Refresh every 30 minutes through Cron.
-- Let administrators trigger a manual refresh through `/?admin_token=...`.
-- Hide model IDs after five consecutive failures.
+The following table covers the 15 providers currently connected.
 
-See [`docs/design.md`](docs/design.md) for the complete design.
+- Catalog counts come from the project `/v1/models` discovery snapshot. Status, available models, and throughput follow the latest deployed [`result` API](https://fm.ggball.top/api/results) snapshot (`2026-09-01T15:32:08.550Z`): a provider with `models.length > 0` is **Normal**; a provider with no model data is **No model data**.
+- Throughput is measured by this project with valid `/chat/completions` probes and is shown in `token/s`.
+- Provider usage rules are based on current official documentation where available. They may change by account, region, or service policy.
+
+![Live provider status](https://fm.ggball.top/api/provider-status.svg)
+
+| Provider | Status | Available models | Max throughput | Usage mechanism | Link |
+|----------|--------|----------------|-----------------|-----------------|------|
+| **Groq Cloud** | 🟢 Normal | Result: 8 models — `qwen/qwen3.8-27b`, `openai/gpt-oss-safeguard-20b`, `openai/gpt-oss-20b`, `allam-2-7b`, `openai/gpt-oss-120b`, `groq/compound-mini`, `qwen/qwen3.6-27b`, `groq/compound` | 805.43 token/s | No check-in. The free plan uses RPM, RPD, TPM, and TPD limits rather than a fixed monthly grant. [Rate limits](https://console.groq.com/docs/rate-limits) | [Console](https://console.groq.com) |
+| **OpenRouter** | 🟢 Normal | Result: 5 models — `minimax/minimax-m3:free`, `nvidia/nemotron-3-nano-30b-a3b`, `openrouter/free`, `minimax/minimax-m2.5`, `~z-ai/glm-latest` | 206.45 token/s | No check-in. Free models generally allow 50 requests/day; purchasing at least $10 in credits increases the limit to about 1,000/day. [FAQ](https://openrouter.ai/docs/faq) | [Website](https://openrouter.ai) |
+| **RNTM** | 🟢 Normal | Result: 12 models — `lfm-2.5-2.6b`, `nemotron-3.5-content-safety`, `free`, `laguna-xs-2.1`, `minimax-m3`, `north-mini-code`, `nemotron-3-ultra-550b-a55b`, `dots-3-note-preview`, `nemotron-3-super-120b-a12b`, `minimax-m2.7`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `nemotron-3.5-lightning` | 85.54 token/s | No check-in; pay-as-you-go. New workspaces may include $5 free credit, while a separate starter offer states that its credit expires after 7 days. [Quickstart](https://rntm.sh/docs/quickstart) · [Starter offer](https://rntm.sh/offer) | [Website](https://rntm.sh) |
+| **NVIDIA NIM** | 🟢 Normal | Result: 10 models — `nvidia/nemotron-3.5-content-safety`, `google/diffusiongemma-26b-a4b-it`, `nvidia/riva-translate-4b-instruct-v2`, `nvidia/nemotron-3-ultra-550b-a55b`, `nvidia/ising-calibration-1.5-31b`, `poolside/laguna-xs-2.1`, `minimaxai/minimax-m3`, `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`, `nvidia/nemotron-3.5-lightning-30b-a3b`, `moonshotai/kimi-k3` | 70.74 token/s | No check-in. Free Endpoints are rate-limited; no single public daily/monthly quota was found. [Model catalog](https://build.nvidia.com/models) | [Model catalog](https://build.nvidia.com/models) |
+| **B.AI** | 🟢 Normal | Result: 7 models — `qwen3.8-27b`, `hy3`, `deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`, `minimax-m2.7`, `glm-5.3-flash`, `qwen3.8-flash` | 55.48 token/s | No check-in. The official documentation currently describes some models as free, with usage accounted for by tokens/credits. [Pricing and usage](https://docs.b.ai/zh-Hans/llmservice/pricing-and-usage/) | [Register](https://chat.b.ai/chat?invite_code=ATZT6T) |
+| **GMI Cloud** | 🟢 Normal | Result: 2 models — `MiniMaxAI/MiniMax-M3`, `MiniMaxAI/MiniMax-M2.7` | 45.21 token/s | No check-in. Some models are marked free in the catalog, but no fixed public daily/monthly quota was found. [Billing](https://docs.gmicloud.ai/inference-engine/billing/price) | [Console](https://console.gmicloud.ai) |
+| **SenseNova** | 🟢 Normal | Result: 3 models — `deepseek-v4-pro`, `deepseek-v4-flash`, `glm-5.2` | 42.60 token/s | No public unified check-in or monthly quota rule found; verify the current account policy on the platform. | [Website](https://www.sensenova.cn) |
+| **ZenMux** | 🟢 Normal | Result: 2 models — `z-ai/glm-4.6v-flash-free`, `dots-studio/dots3-note-prev` | 26.74 token/s | No check-in. The Free plan provides about 5 flows/5 hours for Studio Chat only and no API; API access starts with Starter. [Subscription](https://zenmux.ai/docs/guide/subscription.html) | [Register](https://zenmux.ai/invite/DZSANY) |
+| **JustWoker** | 🟢 Normal | Result: 4 models — `claude-opus-4-8`, `claude-opus-5`, `claude-opus-4-8-thinking`, `claude-opus-5-thinking` | 5.84 token/s | Public third-party information describes registration credit plus daily check-in credit; exact amounts should be verified on the site. [Third-party reference](https://github.com/panxunying/ai-coding-welfare) | [Register](https://api.justwoker.icu/register?aff=BHmu) |
+| **GoRouter** | 🟢 Normal | Result: 4 models — `claude-opus-5-thinking`, `claude-opus-4-8-thinking`, `claude-opus-4-8`, `claude-opus-5` | 5.76 token/s | Third-party information describes a daily check-in, but the amount is unconfirmed. [Third-party reference](https://github.com/panxunying/ai-coding-welfare) | [Register](https://gorouter.app/sign-up?aff=4q8W) |
+| **AIHubMix** | 🔴 No model data | Result: 0 models. Catalog: 409 models and 53 free candidates; the latest probe hit an uncharged-account trial limit | — | No check-in. Free models are documented as requiring no card and having no trial expiry, with per-model RPM and daily token caps reset daily. [Free models](https://docs.aihubmix.com/en/blogs/free-ai-models) | [Website](https://aihubmix.com/?aff=FqPM) |
+| **AMD Radeon Cloud** | 🔴 No model data | Result: 0 models. Catalog: 4 models and 1 configured candidate, `DeepSeek-V4-Flash` | — | Requires an AMD developer account and API key. The current catalog reports `free: false` with positive prices; verify the account's current access policy before treating the target model as free. | [Radeon Cloud](https://developer.amd.com.cn/radeon) |
+| **Bynara** | 🔴 No model data | Result: 0 models. Catalog: 56 models and 6 free candidates, including `glm-5.3-flash-free`, `glm-5.3-free`, and `mimo-v2.5-free` | — | No check-in. The free tier uses per-minute request limits and a daily token quota, normally reset daily in UTC. [Docs](https://router.bynara.id/docs) | [Website](https://router.bynara.id) |
+| **OpenCode ZEN** | 🔴 No model data | Result: 0 models. Catalog: 63 models and 7 free candidates; the latest result snapshot contains no available model | — | No check-in. Free models are time-limited; sign-in and billing details are required, while other models are pay-per-request. [ZEN docs](https://dev.opencode.ai/docs/zen/) | [Website](https://opencode.ai) |
+| **Token Harbor** | 🔴 No model data | Result: 0 models. Catalog: 19 models and 2 free candidates, `mimo-v2.5:free` and `deepseek-v4-flash:free` | — | No check-in. Free usage is a value-based allowance in a rolling 7-day period; there is no welcome credit and no card is required. [FAQ](https://tokenharbor.ai/faq) | [Website](https://tokenharbor.ai) |
+
+> Throughput values are project Probe measurements, not vendor guarantees. Free models, quotas, and account requirements may change at any time.
 
 ## Local setup
 
@@ -130,29 +145,6 @@ Open:
 ```
 
 After successful verification, the application sets an `HttpOnly` cookie that is valid for 12 hours and redirects to `/`.
-
-## Provider free-tier rules
-
-The following providers and free-tier rules are currently connected in `config/providers.local.json`. Free models are identified through model-ID keywords such as `free` and `:free`, as well as provider-specific metadata where available.
-
-| Provider | Free-tier rule | Link |
-|----------|----------------|------|
-| **OpenRouter** | The free tier offers 25+ free models with the `:free` suffix. The limit is 50 requests/day, and only free models can be called for free. | [Pricing](https://openrouter.ai/pricing) |
-| **Bynara (NaraRouter)** | The Free plan includes several free models, including Agnes 2.5 Flash, GLM 5.3 Flash Free, and MiniMax M3 Free. It includes 7M tokens/day and 15 requests/minute; the quota resets daily and does not require a credit card. | [Router](https://router.bynara.id) |
-| **SenseNova** | Provides SenseNova multimodal models. Check the official platform documentation for the current free quota. | [Official site](https://www.sensenova.cn) |
-| **B.AI** | A multi-model aggregation platform with some temporarily free models, such as models marked Limited Free. Supports fiat and on-chain top-ups. | [Official site](https://b.ai) |
-| **RNTM (Runtime)** | Pay-as-you-go with no subscription. Provides free routes such as `freeopenrouter`, `glm-5.2`, and `minimax-m3` at $0/1M tokens. | [Official site](https://rntm.sh) |
-| **AIHubMix** | A multi-model aggregation platform offering 53 free models, including `coding-glm-5.3-free`, `gpt-5.5-free`, and `qwen3.6-plus-preview-free`. Limits and quota are subject to the official policy. | [Official site](https://aihubmix.com) |
-| **OpenCode ZEN** | The opencode.ai unified API gateway offers 7 free models, including `deepseek-v4-flash-free`, `hy3-free`, and `laguna-s-2.1-free`; some models have rate limits. | [Official site](https://opencode.ai) |
-| **GMI Cloud** | Offers two free models, `MiniMaxAI/MiniMax-M3` and `MiniMaxAI/MiniMax-M2.7`, identified through the `is_free` flag. | [Console](https://console.gmicloud.ai) |
-| **JustWoker** | A Claude relay service with four models: `claude-opus-5`, `claude-opus-5-thinking`, `claude-opus-4-8`, and `claude-opus-4-8-thinking`. These IDs have no `free` marker, so availability is detected through the fallback full-probe path. | [Registration](https://api.justwoker.icu/register?aff=BHmu) |
-| **ZenMux** | A multi-model aggregation platform with five zero-price models among 166 models, including `z-ai/glm-4.7-flash-free`, `z-ai/glm-4.6v-flash-free`, and `dots-studio/dots3-note-prev`. Some models require a positive account balance. | [Invitation](https://zenmux.ai/invite/DZSANY) |
-| **NVIDIA NIM** | Offers 13 Free Endpoint models, including `deepseek-v4-flash-0731`, `kimi-k3`, `nemotron-3-ultra`, and `muse-glimmer`; free endpoints have rate limits. | [Models](https://build.nvidia.com/models) |
-| **GoRouter** | An API relay service with four Claude Opus models. These IDs have no `free` marker, so availability is detected through the fallback full-probe path. | [Registration](https://gorouter.app/sign-up?aff=4q8W) |
-| **Token Harbor** | An OpenAI-compatible gateway with two free models among 19: `mimo-v2.5:free` and `deepseek-v4-flash:free`. The free quota is limited within a seven-day cycle and resets after the cycle or with a Pass subscription. | [Official site](https://tokenharbor.ai) |
-| **Groq Cloud** | Offers 14 models, including `openai/gpt-oss-20b` and `qwen/qwen3.8-27b`. These IDs have no `free` marker, so availability is detected through the fallback full-probe path; the free tier is rate-limited at roughly 14K requests/day. | [Console](https://console.groq.com) |
-
-> Free-tier rules may change at any time. Check each provider's official website for the latest information.
 
 ## TODO
 
