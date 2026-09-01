@@ -47,6 +47,18 @@ export function selectTrendModelsForLiveRanking(
 }
 
 /**
+ * 曲线图默认优先展示常用模型族：按实时排行顺序取 qwen、deepseek、glm 模型。
+ */
+export function selectPreferredTrendModelsForLiveRanking(
+  trendStats: ModelTrendStats[],
+  liveRanking: LiveRankedModelRef[],
+  limit = 10,
+): ModelTrendStats[] {
+  const preferredStats = trendStats.filter((model) => /qwen|deepseek|glm/i.test(model.modelId))
+  return selectTrendModelsForLiveRanking(preferredStats, liveRanking, limit)
+}
+
+/**
  * tooltip 展示当前图表所有可见曲线在同一采样 index 上的数据。
  * 不要求各模型 checkedAt 完全一致；否则真实采样有毫秒级偏差时只能看到一条线的数据。
  */

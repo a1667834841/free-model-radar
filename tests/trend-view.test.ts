@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { ModelTrendStats, TrendMetricKey } from '../src/domain/trend'
-import { selectTrendModelsForLiveRanking, collectHoverRowsAtIndex } from '../src/domain/trend-view'
+import {
+  selectPreferredTrendModelsForLiveRanking,
+  selectTrendModelsForLiveRanking,
+  collectHoverRowsAtIndex,
+} from '../src/domain/trend-view'
 
 type LiveModel = { providerId: string; providerName: string; id: string }
 
@@ -55,6 +59,27 @@ describe('selectTrendModelsForLiveRanking', () => {
     )
 
     expect(selected).toEqual([])
+  })
+
+  it('selects the first ten qwen, deepseek, and glm models for the chart', () => {
+    const liveRanking = [
+      { providerId: 'p', providerName: 'P', id: 'other-model' },
+      ...Array.from({ length: 12 }, (_, i) => ({
+        providerId: 'p',
+        providerName: 'P',
+        id: i % 3 === 0 ? `qwen-${i}` : i % 3 === 1 ? `deepseek-${i}` : `glm-${i}`,
+      })),
+    ]
+    const trendStats = liveRanking.map((model, i) => stat(model.providerId, model.id, i + 1))
+
+    const selected = selectPreferredTrendModelsForLiveRanking(trendStats, liveRanking)
+
+    expect(selected).toHaveLength(10)
+    expect(selected.every((model) => /qwen|deepseek|glm/i.test(model.modelId))).toBe(true)
+    expect(selected.map((model) => model.modelId)).toEqual([
+      'qwen-0', 'deepseek-1', 'glm-2', 'qwen-3', 'deepseek-4',
+      'glm-5', 'qwen-6', 'deepseek-7', 'glm-8', 'qwen-9',
+    ])
   })
 })
 

@@ -6,7 +6,11 @@ import type { MessageKey } from '../../i18n'
 import { useI18n } from '../../i18n'
 import { useCountUp } from '@/lib/use-count-up'
 import type { ModelTrendStats, TrendMetricKey, TrendResponse, TrendSample } from '@/domain/trend'
-import { collectHoverRowsAtIndex, selectTrendModelsForLiveRanking } from '@/domain/trend-view'
+import {
+  collectHoverRowsAtIndex,
+  selectPreferredTrendModelsForLiveRanking,
+  selectTrendModelsForLiveRanking,
+} from '@/domain/trend-view'
 import type { LiveRankedModelRef } from '@/domain/trend-view'
 
 type TrendAnalysisProps = {
@@ -117,7 +121,11 @@ export default function TrendAnalysis({ trends, liveModels }: TrendAnalysisProps
 
   // 性能趋势的模型集合与实时概览/模型排行保持一致：以实时排行前十为准，只过滤掉尚无趋势数据的模型。
   const topModels = useMemo(
-    () => selectTrendModelsForLiveRanking(trends.modelStats, liveModels, CHART_SERIES_LIMIT),
+    () => selectTrendModelsForLiveRanking(trends.modelStats, liveModels, TREND_MODEL_LIMIT),
+    [trends.modelStats, liveModels],
+  )
+  const chartModels = useMemo(
+    () => selectPreferredTrendModelsForLiveRanking(trends.modelStats, liveModels, CHART_SERIES_LIMIT),
     [trends.modelStats, liveModels],
   )
 
@@ -211,7 +219,7 @@ export default function TrendAnalysis({ trends, liveModels }: TrendAnalysisProps
           title={t(option.titleKey)}
           subtitle={t('trend.chart.allModelsSub')}
           samples={trends.samples}
-          models={topModels}
+          models={chartModels}
           metric={metric}
           hidden={hidden}
           onToggleModel={toggleModel}
@@ -327,7 +335,8 @@ const SERIES_COLORS = [
   'var(--prov-bai)', 'var(--lat-slow)', 'color-mix(in oklch, var(--cyan) 55%, var(--accent))',
   'color-mix(in oklch, var(--green) 50%, var(--cyan))', 'color-mix(in oklch, var(--purple) 55%, var(--accent))',
 ]
-const CHART_SERIES_LIMIT = 5
+const TREND_MODEL_LIMIT = 10
+const CHART_SERIES_LIMIT = 10
 const HOUR_LABELS = ['00', '03', '06', '09', '12', '15', '18', '21', '23']
 
 function smoothPath(points: Array<{ x: number; y: number }>): string {
