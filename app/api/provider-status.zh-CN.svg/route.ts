@@ -6,5 +6,5 @@ export async function GET() {
   const env = await getRadarEnv()
   const results = await getLatestResults(env.RADAR_KV)
 
-  return createProviderStatusSvgResponse(renderProviderStatusSvg(results, false))
+  return createProviderStatusSvgResponse(renderProviderStatusSvg(results, true))
 }
