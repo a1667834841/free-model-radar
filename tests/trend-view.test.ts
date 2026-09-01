@@ -47,6 +47,15 @@ describe('selectTrendModelsForLiveRanking', () => {
     expect(selected).toHaveLength(10)
     expect(selected.map((model) => model.modelId)).toEqual(['m0', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9'])
   })
+
+  it('returns no chart models when historical ids no longer match live ids', () => {
+    const selected = selectTrendModelsForLiveRanking(
+      [stat('old-provider', 'old-model', 100)],
+      [{ providerId: 'new-provider', providerName: 'New', id: 'new-model' }],
+    )
+
+    expect(selected).toEqual([])
+  })
 })
 
 describe('collectHoverRowsAtIndex', () => {

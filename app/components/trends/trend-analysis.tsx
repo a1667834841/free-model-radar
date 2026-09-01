@@ -141,6 +141,18 @@ export default function TrendAnalysis({ trends, liveModels }: TrendAnalysisProps
     )
   }
 
+  if (topModels.length === 0) {
+    return (
+      <section className="trend-section">
+        <div className="empty-state trend-empty">
+          <span className="empty-icon">⌁</span>
+          <strong>{t('trend.empty.title')}</strong>
+          <span>{t('trend.empty.noLiveModels')}</span>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="trend-section">
       <div className="trend-hero">
@@ -378,6 +390,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
   }, [models, samples, metric])
 
   const visibleSeries = useMemo(() => series.filter((item) => !hidden.has(item.key)), [series, hidden])
+  const hasRenderableSeries = visibleSeries.some((item) => item.pts.length > 0)
 
   // 吸附/刻度按采样点 index 对齐：同一 index 下展示所有可见曲线的数据，不要求 checkedAt 完全一致。
   const maxPointCount = useMemo(() => {
@@ -494,7 +507,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
         </div>
         <span className="range-chip">{t('trend.scale.global')}</span>
       </div>
-      <div className="chart-cover">
+      {hasRenderableSeries ? <div className="chart-cover">
           <svg
             className="trend-chart chart-anim"
             viewBox={`0 0 ${CHART_W} ${CHART_H}`}
@@ -596,7 +609,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
               ))}
             </div>
           ) : null}
-      </div>
+      </div> : <div className="empty-state trend-chart-empty"><span className="empty-icon">⌁</span><span>{t('trend.empty.noMetric')}</span></div>}
       <div className="chart-legend">
         {models.map((model, index) => {
           const key = modelKey(model)

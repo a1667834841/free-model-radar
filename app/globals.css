@@ -2511,6 +2511,14 @@ svg {
   animation: fade-in .3s both;
 }
 
+.trend-retry {
+  margin-top: 8px;
+}
+
+.trend-chart-empty {
+  min-height: 240px;
+}
+
 .chart-tip {
   position: absolute;
   z-index: 4;

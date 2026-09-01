@@ -96,6 +96,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
   const [trendData, setTrendData] = useState<TrendResponse | null>(trends)
   const [trendLoading, setTrendLoading] = useState(false)
   const [trendError, setTrendError] = useState<string | null>(null)
+  const [trendRequestId, setTrendRequestId] = useState(0)
 
   // 视图选择持久化（设计稿 L810-831）：SSR 下只在 effect 内读 localStorage，首帧固定 overview
   useEffect(() => {
@@ -114,9 +115,11 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
   useEffect(() => {
     if (pageView !== 'trends' || trendData || trendLoading) return
     let cancelled = false
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 12_000)
     setTrendLoading(true)
     setTrendError(null)
-    fetch('/api/trends')
+    fetch('/api/trends', { signal: controller.signal, headers: { accept: 'application/json' } })
       .then(async (response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         return await response.json() as TrendResponse
@@ -125,13 +128,27 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
         if (!cancelled) setTrendData(data)
       })
       .catch((error) => {
-        if (!cancelled) setTrendError(error instanceof Error ? error.message : String(error))
+        if (!cancelled) {
+          setTrendError(error instanceof DOMException && error.name === 'AbortError'
+            ? '__timeout__'
+            : error instanceof Error ? error.message : String(error))
+        }
       })
       .finally(() => {
         if (!cancelled) setTrendLoading(false)
       })
-    return () => { cancelled = true }
-  }, [pageView, trendData, trendLoading])
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [pageView, trendData, trendRequestId])
+
+  function retryTrendRequest() {
+    setTrendError(null)
+    setTrendLoading(false)
+    setTrendRequestId((value) => value + 1)
+  }
 
   const evaluationMethod = useMemo(() => getEvaluationMethod(DEFAULT_EVALUATION_METHOD_ID), [])
   const liveRankedModels = useMemo(() => evaluationMethod.rank(models), [evaluationMethod, models])
@@ -445,8 +462,9 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
           <section className="trend-section">
             <div className="empty-state trend-empty">
               <span className="empty-icon">⌁</span>
-              <strong>{trendError ? '趋势加载失败' : '正在加载趋势'}</strong>
-              <span>{trendError ? trendError : '趋势数据会在打开此页签时按需加载。'}</span>
+              <strong>{trendError ? t('trend.loading.error') : t('trend.loading.title')}</strong>
+              <span>{trendError === '__timeout__' ? t('trend.loading.timeout') : trendError ?? t('trend.loading.desc')}</span>
+              {trendError ? <button type="button" className="btn btn-ghost trend-retry" onClick={retryTrendRequest}>{t('trend.loading.retry')}</button> : null}
             </div>
           </section>
         )}
