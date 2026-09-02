@@ -31,6 +31,13 @@ function liveKey(model: Pick<LiveRankedModelRef, 'providerId' | 'id'>): string {
   return `${model.providerId}:${model.id}`
 }
 
+/** 趋势图的统一显示名：厂商在前，模型在后；具体截断交给图例/tooltip 容器处理。 */
+export function formatTrendModelName(model: Pick<ModelTrendStats, 'providerName' | 'modelId'>): string {
+  const providerName = model.providerName.trim()
+  const modelId = model.modelId.trim()
+  return providerName ? `${providerName} · ${modelId}` : modelId
+}
+
 /**
  * 性能趋势展示模型必须跟实时概览/模型排行一致：以实时排行为主序，只选其中有趋势数据的模型。
  */

@@ -16,10 +16,12 @@ export {
   resolveStreamingMetrics,
 } from './types'
 export {
-  computeStreamingScore,
+  computeRrfScore,
   DEFAULT_EVALUATION_METHOD_ID,
   getEvaluationMethod,
   listEvaluationMethods,
+  normalizeRrfScore,
+  RRF_K,
 } from './methods'
 export {
   findFastestTtftModel,

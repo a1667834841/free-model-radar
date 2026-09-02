@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeStreamingScore, findFastestTtftModel, findModelBest, getEvaluationMethod } from '@/domain/evaluation'
+import { computeRrfScore, findFastestTtftModel, findModelBest, getEvaluationMethod, normalizeRrfScore } from '@/domain/evaluation'
 import type { FlattenedModel } from '@/domain/evaluation'
 
 function makeModel(overrides: Partial<FlattenedModel> & Pick<FlattenedModel, 'id' | 'providerId' | 'providerName'>): FlattenedModel {
@@ -18,21 +18,36 @@ function makeModel(overrides: Partial<FlattenedModel> & Pick<FlattenedModel, 'id
 }
 
 describe('streaming performance evaluation', () => {
-  it('computes score as throughput divided by ttft seconds plus epsilon', () => {
-    expect(computeStreamingScore(200, 50)).toBeCloseTo(50 / (0.2 + 0.1))
+  it('computes RRF from metric ranks', () => {
+    expect(computeRrfScore([1, 2, 3])).toBeCloseTo(1 / 61 + 1 / 62 + 1 / 63)
+    expect(computeRrfScore([1], [2])).toBeCloseTo(2 / 61)
   })
 
-  it('ranks models by composite score descending', () => {
+  it('normalizes the best weighted RRF score to 100', () => {
+    expect(normalizeRrfScore(computeRrfScore([1, 1, 1], [1, 2, 1]))).toBeCloseTo(100)
+  })
+
+  it('ranks models by weighted RRF score descending', () => {
     const method = getEvaluationMethod('streaming-performance')
     const ranked = method.rank([
-      makeModel({ id: 'slow', providerId: 'a', providerName: 'A', ttftMs: 800, tokensPerSec: 30 }),
-      makeModel({ id: 'fast', providerId: 'b', providerName: 'B', ttftMs: 150, tokensPerSec: 80 }),
-      makeModel({ id: 'mid', providerId: 'c', providerName: 'C', ttftMs: 300, tokensPerSec: 60 }),
+      makeModel({ id: 'a', providerId: 'a', providerName: 'A', ttftMs: 100, tokensPerSec: 10, latencyMs: 300 }),
+      makeModel({ id: 'b', providerId: 'b', providerName: 'B', ttftMs: 200, tokensPerSec: 50, latencyMs: 200 }),
+      makeModel({ id: 'c', providerId: 'c', providerName: 'C', ttftMs: 300, tokensPerSec: 100, latencyMs: 100 }),
     ])
 
-    expect(ranked.map((model) => model.id)).toEqual(['fast', 'mid', 'slow'])
+    expect(ranked.map((model) => model.id)).toEqual(['c', 'b', 'a'])
     expect(ranked[0].rank).toBe(1)
     expect(ranked[0].score).toBeGreaterThan(ranked[1].score ?? 0)
+  })
+
+  it('reduces the influence of throughput above 300 t/s', () => {
+    const method = getEvaluationMethod('streaming-performance')
+    const ranked = method.rank([
+      makeModel({ id: 'outlier', providerId: 'a', providerName: 'A', ttftMs: 100, tokensPerSec: 500, latencyMs: 100 }),
+      makeModel({ id: 'balanced', providerId: 'b', providerName: 'B', ttftMs: 200, tokensPerSec: 100, latencyMs: 200 }),
+    ])
+
+    expect(ranked.map((model) => model.id)).toEqual(['balanced', 'outlier'])
   })
 
   it('derives legacy metrics when streaming fields are missing', () => {
@@ -54,7 +69,7 @@ describe('streaming performance evaluation', () => {
     expect(ranked[0].tpsQuality).toBe('provider-usage')
   })
 
-  it('keeps content-estimated throughput out of composite score', () => {
+  it('keeps content-estimated throughput out of the TPS rank', () => {
     const method = getEvaluationMethod('streaming-performance')
     const ranked = method.rank([
       makeModel({
@@ -74,8 +89,8 @@ describe('streaming performance evaluation', () => {
     ])
 
     expect(ranked.find((model) => model.id === 'estimated')?.tpsQuality).toBe('estimated')
-    expect(ranked.find((model) => model.id === 'estimated')?.score).toBeNull()
     expect(ranked[0].id).toBe('measured')
+    expect(ranked.find((model) => model.id === 'estimated')?.score).toBeLessThan(ranked.find((model) => model.id === 'measured')?.score ?? Infinity)
   })
 
   it('finds fastest TTFT independently from composite ranking', () => {

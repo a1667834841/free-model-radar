@@ -27,7 +27,7 @@ export type EvaluationMethod = {
   descriptionKey: 'eval.method.streaming.desc' | 'eval.method.latency.desc'
   /** i18n key for footnote (e.g. single-threaded disclaimer) */
   noteKey?: 'eval.note.singleThread'
-  /** Compute derived metrics and composite score for one model */
+  /** Compute derived metrics; cohort-dependent composite scores are assigned during ranking. */
   evaluate: (model: FlattenedModel) => EvaluationMetrics
   /** Sort models best-first; assigns rank starting at 1 */
   rank: (models: FlattenedModel[]) => RankedModel[]

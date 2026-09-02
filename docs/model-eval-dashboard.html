@@ -518,7 +518,7 @@
     <!-- model ranking -->
     <section class="section" data-od-id="model-ranking">
       <div class="section-head">
-        <button class="rank-toggle" id="rankToggle" aria-expanded="false" aria-controls="rankJson">免费模型排行 <i class="help-dot" data-tip="单线程串行请求下的探测结果，不代表并发吞吐。&#10;&#10;首字耗时 ttft_ms = 首个 token 返回时刻 − 请求发出时刻&#10;端到端 e2e_ms = 响应收尾完成时刻 − 请求发出时刻&#10;吞吐 tps = completion_tokens ÷ 生成耗时(秒)&#10;综合分 score = 归一化加权(吞吐↑, 延迟↓) → 0–100">?</i> <span class="rank-caret" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6 8 10 12 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
+        <button class="rank-toggle" id="rankToggle" aria-expanded="false" aria-controls="rankJson">免费模型排行 <i class="help-dot" data-tip="单线程串行请求下的探测结果，不代表并发吞吐。&#10;&#10;首字耗时 ttft_ms = 首个 token 返回时刻 − 请求发出时刻&#10;端到端 e2e_ms = 响应收尾完成时刻 − 请求发出时刻&#10;吞吐 tps = completion_tokens ÷ 生成耗时(秒)&#10;综合分 score = 加权 RRF(TTFT↑, 吞吐↑, E2E↑) → 0–100；吞吐权重 2×，>300 t/s 降为 0.5×">?</i> <span class="rank-caret" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6 8 10 12 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
         <div class="export-bar">
           <div class="export-control">
             <select id="export" class="export-select" aria-label="选择 Agent 工具">
@@ -1147,7 +1147,7 @@
         { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
         { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
         { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
-        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+        { t: '综合分 · Score', f: 'score = 加权 RRF(TTFT↑, 吞吐↑, E2E↑) → 0–100', k: 'score' }
       ]
     },
     {
@@ -1158,7 +1158,7 @@
         { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
         { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
         { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
-        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+        { t: '综合分 · Score', f: 'score = 加权 RRF(TTFT↑, 吞吐↑, E2E↑) → 0–100', k: 'score' }
       ]
     },
     {
@@ -1169,7 +1169,7 @@
         { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
         { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
         { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
-        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+        { t: '综合分 · Score', f: 'score = 加权 RRF(TTFT↑, 吞吐↑, E2E↑) → 0–100', k: 'score' }
       ]
     },
     {
@@ -1180,7 +1180,7 @@
         { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
         { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
         { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
-        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+        { t: '综合分 · Score', f: 'score = 加权 RRF(TTFT↑, 吞吐↑, E2E↑) → 0–100', k: 'score' }
       ]
     },
     {
@@ -1191,7 +1191,7 @@
         { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
         { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
         { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
-        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+        { t: '综合分 · Score', f: 'score = 加权 RRF(TTFT↑, 吞吐↑, E2E↑) → 0–100', k: 'score' }
       ]
     },
     {
@@ -1202,7 +1202,7 @@
         { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
         { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
         { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
-        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+        { t: '综合分 · Score', f: 'score = 加权 RRF(TTFT↑, 吞吐↑, E2E↑) → 0–100', k: 'score' }
       ]
     },
     {
@@ -1213,7 +1213,7 @@
         { t: '首字耗时 · TTFT', f: 'ttft_ms = 首个 token 返回时刻 − 请求发出时刻', k: 'ttft' },
         { t: '端到端 · E2E', f: 'e2e_ms = 响应收尾完成时刻 − 请求发出时刻', k: 'e2e' },
         { t: '吞吐 · TPS', f: 'tps = completion_tokens ÷ 生成耗时(秒)', k: 'tps' },
-        { t: '综合分 · Score', f: 'score = 归一化加权(吞吐↑, 延迟↓) → 0–100', k: 'score' }
+        { t: '综合分 · Score', f: 'score = 加权 RRF(TTFT↑, 吞吐↑, E2E↑) → 0–100', k: 'score' }
       ]
     }
   ];

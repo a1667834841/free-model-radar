@@ -521,6 +521,7 @@ details summary { cursor: pointer; }
 .legend-item {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
   max-width: 220px;
   gap: 7px;
   border: 1px solid var(--line);
@@ -534,6 +535,13 @@ details summary { cursor: pointer; }
   white-space: nowrap;
   cursor: pointer;
   transition: background .18s var(--ease-out), color .18s var(--ease-out), border-color .18s var(--ease-out), opacity .18s var(--ease-out);
+}
+
+.legend-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .legend-item i {
@@ -2524,7 +2532,7 @@ svg {
   z-index: 4;
   pointer-events: none;
   min-width: 138px;
-  max-width: 240px;
+  max-width: min(240px, calc(100% - 24px));
   max-height: 236px;
   overflow-y: auto;
   border: 1px solid var(--line-light);

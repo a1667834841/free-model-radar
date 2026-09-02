@@ -4,6 +4,7 @@ import {
   selectPreferredTrendModelsForLiveRanking,
   selectTrendModelsForLiveRanking,
   collectHoverRowsAtIndex,
+  formatTrendModelName,
 } from '../src/domain/trend-view'
 
 type LiveModel = { providerId: string; providerName: string; id: string }
@@ -25,6 +26,11 @@ function stat(providerId: string, modelId: string, ttftMs: number, tps = 10): Mo
 }
 
 describe('selectTrendModelsForLiveRanking', () => {
+  it('formats chart labels with provider first', () => {
+    expect(formatTrendModelName(stat('flatkey', 'deepseek-v4-flash', 100))).toBe('FLATKEY · deepseek-v4-flash')
+    expect(formatTrendModelName({ providerName: '', modelId: 'model-only' })).toBe('model-only')
+  })
+
   it('uses realtime overview ranking order instead of resorting by the selected trend metric', () => {
     const liveRanking: LiveModel[] = [
       { providerId: 'p1', providerName: 'P1', id: 'live-first' },

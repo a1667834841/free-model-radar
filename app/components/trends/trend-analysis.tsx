@@ -8,6 +8,7 @@ import { useCountUp } from '@/lib/use-count-up'
 import type { ModelTrendStats, TrendMetricKey, TrendResponse, TrendSample } from '@/domain/trend'
 import {
   collectHoverRowsAtIndex,
+  formatTrendModelName,
   selectPreferredTrendModelsForLiveRanking,
   selectTrendModelsForLiveRanking,
 } from '@/domain/trend-view'
@@ -390,7 +391,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
       pts.sort((a, b) => a.t - b.t)
       return {
         key,
-        name: model.modelId,
+        name: formatTrendModelName(model),
         model,
         color: SERIES_COLORS[index % SERIES_COLORS.length],
         pts,
@@ -568,7 +569,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
                       strokeLinejoin="round"
                       style={{ opacity: seriesLineOpacity(item.key) }}
                     >
-                      <title>{item.model.modelId}</title>
+                      <title>{item.name}</title>
                     </path>
                   ) : null}
                   {last ? (
@@ -612,7 +613,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
               {tipRows.map((row) => (
                 <div className="tip-row" key={row.key}>
                   <i style={{ '--series': row.color } as CSSProperties} />
-                  <span className="tip-name">{row.name}</span>
+                  <span className="tip-name" title={row.name}>{row.name}</span>
                   <b>{formatMetric(row.value, metric)}<small>{option.unit}</small></b>
                 </div>
               ))}
@@ -623,6 +624,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
         {models.map((model, index) => {
           const key = modelKey(model)
           const isHidden = hidden.has(key)
+          const displayName = formatTrendModelName(model)
           return (
             <button
               key={key}
@@ -630,10 +632,11 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
               className={`legend-item ${isHidden ? 'off' : ''}`}
               onClick={() => onToggleModel(key)}
               aria-pressed={!isHidden}
-              title={model.modelId}
+              aria-label={displayName}
+              title={displayName}
             >
               <i style={{ '--series': SERIES_COLORS[index % SERIES_COLORS.length] } as CSSProperties} />
-              {model.modelId}
+              <span className="legend-label">{displayName}</span>
             </button>
           )
         })}
