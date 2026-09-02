@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import type { CSSProperties } from 'react'
 import { useI18n } from './i18n'
 import { useCountUp } from '@/lib/use-count-up'
-import { getProviderHomeUrl, getProviderIconUrl } from '@/lib/provider-icon'
+import { getProviderIconUrl } from '@/lib/provider-icon'
 import { getTtftColor, getTtftTierClass } from '@/lib/ttft-tier'
 import RefreshButton from './refresh-button'
 import ModelEvaluation from './components/evaluation/model-evaluation'
 import TrendAnalysis from './components/trends/trend-analysis'
+import ProviderGuideModal from './components/providers/provider-guide-modal'
 import type { ProviderResult, ModelResult } from '@/domain/result'
 import type { TrendResponse } from '@/domain/trend'
 import {
@@ -92,6 +93,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
   const { t, locale, setLocale } = useI18n()
   const [pageView, setPageView] = useState<'overview' | 'trends'>('overview')
   const [modelView, setModelView] = useState<'ranking' | 'provider'>('ranking')
+  const [guideProvider, setGuideProvider] = useState<ProviderResult | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const [trendData, setTrendData] = useState<TrendResponse | null>(trends)
   const [trendLoading, setTrendLoading] = useState(false)
@@ -201,6 +203,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
     : 0
   const providerHealthPct = providers.length > 0 ? (healthyProviders / providers.length) * 100 : 0
   const relativeUpdatedAt = hydrated && updatedAt ? formatRelative(updatedAt, locale) : '—'
+  const closeGuide = useCallback(() => setGuideProvider(null), [])
 
   return (
     <div className="dashboard">
@@ -347,8 +350,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
           <div className="overview-list">
             {providerOverview.map((p, idx) => {
               const color = providerColors[p.id]
-              const homeUrl = getProviderHomeUrl(p)
-              const faviconUrl = getProviderIconUrl(p, homeUrl)
+              const faviconUrl = getProviderIconUrl(p)
               const leftPct = p.modelCount > 0 ? (p.min / ttftScaleMax) * 100 : 0
               const widthPct = p.modelCount > 0 ? ((p.max - p.min) / ttftScaleMax) * 100 : 0
               const midPct = p.modelCount > 0 ? (p.median / ttftScaleMax) * 100 : 0
@@ -366,19 +368,17 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
                         />
                       ) : null}
                     </span>
-                    {homeUrl ? (
-                      <a
-                        className="prov-name"
-                        href={homeUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {p.name || p.id}
-                      </a>
-                    ) : (
-                      <span className="prov-name">{p.name || p.id}</span>
-                    )}
+                    <span className="prov-name">{p.name || p.id}</span>
                     <span className={`prov-status ${p.status}`}>{t(`status.${p.status}` as any)}</span>
+                    <button
+                      type="button"
+                      className="prov-guide-trigger"
+                      onClick={() => setGuideProvider(p)}
+                      aria-haspopup="dialog"
+                      aria-label={t('guide.openFor', { provider: p.name || p.id })}
+                    >
+                      {t('guide.button')} <span aria-hidden="true">↗</span>
+                    </button>
                   </div>
                   <div className="prov-bar">
                     <div className="prov-track">
@@ -469,6 +469,8 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
           </section>
         )}
       </div>
+
+      <ProviderGuideModal provider={guideProvider} onClose={closeGuide} />
 
       {refreshStatus.error && (
         <div className="error-banner">{t('error.banner', { error: refreshStatus.error })}</div>

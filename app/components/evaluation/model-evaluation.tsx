@@ -20,7 +20,7 @@ import {
 } from '@/domain/evaluation'
 import { AGENT_OPTIONS } from '@/domain/agent-config'
 import { highlightJson } from '@/lib/json-highlight'
-import { getProviderHomeUrl, getProviderIconUrl } from '@/lib/provider-icon'
+import { getProviderIconUrl } from '@/lib/provider-icon'
 import { getScoreTierVar } from '@/lib/score-tier'
 import { useI18n } from '../../i18n'
 import AgentConfigExport from '../export/agent-config-export'
@@ -213,7 +213,6 @@ export default function ModelEvaluation({
         const providerColor = providerColors[model.providerId] ?? '#5FB8CE'
         const provider = providerMeta[model.providerId]
         const iconUrl = provider ? getProviderIconUrl(provider) : null
-        const providerUrl = provider ? getProviderHomeUrl(provider) : null
         const linkInner = (
           <>
             <span className="mini-fav" style={{ '--prov': providerColor } as CSSProperties}>
@@ -232,19 +231,7 @@ export default function ModelEvaluation({
         )
         return (
           <span className="m-prov hide-sm">
-            {providerUrl ? (
-              <a
-                className="m-prov-link"
-                href={providerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(event) => { event.stopPropagation() }}
-              >
-                {linkInner}
-              </a>
-            ) : (
-              <span className="m-prov-link">{linkInner}</span>
-            )}
+            <span className="m-prov-link">{linkInner}</span>
           </span>
         )
       },
