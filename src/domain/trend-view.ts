@@ -83,3 +83,29 @@ export function collectHoverRowsAtIndex(
     .filter((row): row is HoverRow => row !== null)
     .sort((a, b) => b.value - a.value)
 }
+
+function nearestPoint(points: HoverSeriesPoint[], targetTime: number): HoverSeriesPoint | null {
+  if (points.length === 0) return null
+  return points.reduce((nearest, point) => {
+    if (!nearest) return point
+    return Math.abs(point.t - targetTime) < Math.abs(nearest.t - targetTime) ? point : nearest
+  }, null as HoverSeriesPoint | null)
+}
+
+/**
+ * 按真实时间戳收集 hover 数据，避免各模型采样缺失时用相同 index 导致时间错位。
+ */
+export function collectHoverRowsAtTime(
+  series: HoverSeries[],
+  targetTime: number,
+  _metric: TrendMetricKey,
+): HoverRow[] {
+  return series
+    .map((item): HoverRow | null => {
+      const point = nearestPoint(item.pts, targetTime)
+      if (!point || !Number.isFinite(point.v)) return null
+      return { key: item.key, name: item.name, color: item.color, value: point.v, time: point.t }
+    })
+    .filter((row): row is HoverRow => row !== null)
+    .sort((a, b) => b.value - a.value)
+}

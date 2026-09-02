@@ -7,7 +7,7 @@ import { useI18n } from '../../i18n'
 import { useCountUp } from '@/lib/use-count-up'
 import type { ModelTrendStats, TrendMetricKey, TrendResponse, TrendSample } from '@/domain/trend'
 import {
-  collectHoverRowsAtIndex,
+  collectHoverRowsAtTime,
   formatTrendModelName,
   selectPreferredTrendModelsForLiveRanking,
   selectTrendModelsForLiveRanking,
@@ -85,9 +85,11 @@ function formatPercent(value: number): string {
 
 /** x 轴刻度标签：短窗口用 HH:00，长窗口用 MM-DD（设计稿 L953-958 的时间语义适配版）。 */
 
-function formatClock(ts: number): string {
+function formatTrendTime(ts: number, includeDate: boolean): string {
   const d = new Date(ts)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  const clock = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  if (!includeDate) return clock
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${clock}`
 }
 
 function compareMetricValues(a: number | null, b: number | null, lowerIsBetter: boolean): number {
@@ -374,7 +376,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
 }) {
   const { t } = useI18n()
   const option = getMetricOption(metric)
-  const [hover, setHover] = useState<{ index: number; bestKey: string | null } | null>(null)
+  const [hover, setHover] = useState<{ time: number; bestKey: string | null } | null>(null)
 
   const series = useMemo<ChartSeries[]>(() => {
     return models.map((model, index) => {
@@ -402,11 +404,6 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
   const visibleSeries = useMemo(() => series.filter((item) => !hidden.has(item.key)), [series, hidden])
   const hasRenderableSeries = visibleSeries.some((item) => item.pts.length > 0)
 
-  // 吸附/刻度按采样点 index 对齐：同一 index 下展示所有可见曲线的数据，不要求 checkedAt 完全一致。
-  const maxPointCount = useMemo(() => {
-    return visibleSeries.reduce((max, item) => Math.max(max, item.pts.length), 0)
-  }, [visibleSeries])
-
   // Y 轴按全部数据（含隐藏曲线）计算，min/max ± 12% padding、不从 0 起（设计稿 L930-938）
   const { minV, maxV } = useMemo(() => {
     let mn = Infinity
@@ -428,11 +425,25 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
   const plotW = CHART_W - CHART_PAD.left - CHART_PAD.right
   const plotH = CHART_H - CHART_PAD.top - CHART_PAD.bottom
   const ySpan = Math.max(maxV - minV, 1)
-  const lastIndex = Math.max(maxPointCount - 1, 1)
+  const { minT, maxT } = useMemo(() => {
+    let min = Infinity
+    let max = -Infinity
+    for (const item of series) {
+      for (const point of item.pts) {
+        if (point.t < min) min = point.t
+        if (point.t > max) max = point.t
+      }
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return { minT: 0, maxT: 1 }
+    if (min === max) return { minT: min - 30 * 60 * 1000, maxT: max + 30 * 60 * 1000 }
+    return { minT: min, maxT: max }
+  }, [series])
+  const timeSpan = Math.max(maxT - minT, 1)
+  const includeDateInTimeLabel = timeSpan > 36 * 60 * 60 * 1000
 
-  // 设计稿按采样点均匀铺满 x 轴（xAt(i)），而不是按真实时间间隔拉伸。
-  function xAt(index: number): number {
-    return CHART_PAD.left + (plotW * index) / lastIndex
+  // X 轴按真实采样时间映射，保证曲线位置、刻度和 hover 时间一致。
+  function xAtTime(time: number): number {
+    return CHART_PAD.left + (plotW * (time - minT)) / timeSpan
   }
 
   function y(value: number): number {
@@ -441,7 +452,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
 
   // hover：吸附最近采样时刻 + 最近的曲线（设计稿 attachHover L1023-1062）
   function handleMouseMove(event: ReactMouseEvent<SVGSVGElement>) {
-    if (maxPointCount === 0) return
+    if (!hasRenderableSeries) return
     const rect = event.currentTarget.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) return
     const sx = ((event.clientX - rect.left) / rect.width) * CHART_W
@@ -450,12 +461,26 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
       setHover(null)
       return
     }
-    const rawIndex = ((sx - CHART_PAD.left) / plotW) * lastIndex
-    const index = Math.max(0, Math.min(maxPointCount - 1, Math.round(rawIndex)))
+    const ratio = Math.max(0, Math.min(1, (sx - CHART_PAD.left) / plotW))
+    const rawTime = minT + ratio * timeSpan
+    let hoverTime = rawTime
+    let closestDistance = Infinity
+    for (const item of visibleSeries) {
+      for (const point of item.pts) {
+        const distance = Math.abs(point.t - rawTime)
+        if (distance < closestDistance) {
+          closestDistance = distance
+          hoverTime = point.t
+        }
+      }
+    }
     let bestKey: string | null = null
     let bestDy = Infinity
     for (const item of visibleSeries) {
-      const point = item.pts[index]
+      const point = item.pts.reduce((nearest, candidate) => {
+        if (!nearest) return candidate
+        return Math.abs(candidate.t - hoverTime) < Math.abs(nearest.t - hoverTime) ? candidate : nearest
+      }, null as ChartPoint | null)
       if (!point) continue
       const dy = Math.abs(y(point.v) - sy)
       if (dy < bestDy) {
@@ -463,18 +488,16 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
         bestKey = item.key
       }
     }
-    setHover((prev) => (prev && prev.index === index && prev.bestKey === bestKey ? prev : { index, bestKey }))
+    setHover((prev) => (prev && prev.time === hoverTime && prev.bestKey === bestKey ? prev : { time: hoverTime, bestKey }))
   }
 
-  // hidden 变化后 hover.index 可能越界，做边界防护
-  const hoverIndex = hover && hover.index < maxPointCount ? hover.index : null
   const tipRows = useMemo(() => {
-    if (hoverIndex == null) return []
-    return collectHoverRowsAtIndex(visibleSeries, hoverIndex, metric)
-  }, [visibleSeries, hoverIndex, metric])
-  const hoverTime = tipRows[0]?.time ?? null
+    if (hover == null) return []
+    return collectHoverRowsAtTime(visibleSeries, hover.time, metric)
+  }, [visibleSeries, hover, metric])
+  const hoverTime = hover?.time ?? null
 
-  const hoverBest = hoverIndex != null ? tipRows.find((row) => row.key === hover?.bestKey) ?? null : null
+  const hoverBest = hoverTime != null ? tipRows.find((row) => row.key === hover?.bestKey) ?? null : null
 
   function seriesLineOpacity(key: string): number {
     if (hoverTime == null || !hover?.bestKey) return 1
@@ -486,17 +509,19 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
     return key === hover.bestKey ? 1 : 0.28
   }
 
-  // x 轴刻度对齐设计稿：固定 00/03/.../23 的 9 个小时标签。
-  const tickLabels = useMemo(() => HOUR_LABELS.map((hour) => ({
-    hour,
-    index: Math.round((Number.parseInt(hour, 10) / 23) * lastIndex),
-  })), [lastIndex])
+  // x 轴刻度按真实时间范围均匀取样；多日窗口显示日期，避免不同日期的小时混淆。
+  const tickCount = rangeDays > 1 ? 7 : HOUR_LABELS.length
+  const tickLabels = useMemo(() => Array.from({ length: tickCount }, (_, index) => {
+    const ratio = tickCount === 1 ? 0 : index / (tickCount - 1)
+    const time = minT + ratio * timeSpan
+    return { time, label: formatTrendTime(time, includeDateInTimeLabel) }
+  }), [includeDateInTimeLabel, minT, tickCount, timeSpan])
 
   let crossX: number | null = null
   let crossY: number | null = null
   let tipStyle: CSSProperties | undefined
-  if (hoverIndex != null) {
-    crossX = xAt(hoverIndex)
+  if (hoverTime != null) {
+    crossX = xAtTime(hoverTime)
     crossY = hoverBest ? y(hoverBest.value) - 10 : CHART_PAD.top + plotH / 2
     const half = 118 // 设计稿 L1052：tooltip 半高，保证上下不越界
     const clampedY = Math.max(CHART_PAD.top + half, Math.min(CHART_H - CHART_PAD.bottom - half, crossY))
@@ -538,15 +563,15 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
                 </g>
               )
             })}
-            {tickLabels.map(({ hour, index }) => (
+            {tickLabels.map(({ time, label }) => (
               <text
-                key={hour}
-                x={xAt(index)}
+                key={time}
+                x={xAtTime(time)}
                 y={CHART_H - CHART_PAD.bottom + 18}
                 className="chart-label"
                 textAnchor="middle"
               >
-                {`${hour}:00`}
+                {label}
               </text>
             ))}
             <line x1={CHART_PAD.left} y1={CHART_PAD.top} x2={CHART_PAD.left} y2={CHART_H - CHART_PAD.bottom} className="chart-axis" />
@@ -554,7 +579,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
             <rect x={CHART_PAD.left} y={CHART_PAD.top} width={plotW} height={plotH} fill="transparent" />
             {/* 设计稿 L965：best（越低越好的最优曲线）最后绘制、叠在最上层 */}
             {[...visibleSeries].reverse().map((item) => {
-              const points = item.pts.map((point, index) => ({ x: xAt(index), y: y(point.v) }))
+              const points = item.pts.map((point) => ({ x: xAtTime(point.t), y: y(point.v) }))
               const last = item.pts[item.pts.length - 1]
               return (
                 <g key={item.key} className="chart-series">
@@ -575,7 +600,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
                   {last ? (
                     <circle
                       className="series-end"
-                      cx={xAt(item.pts.length - 1)}
+                      cx={xAtTime(last.t)}
                       cy={y(last.v)}
                       r="2.2"
                       fill={item.color}
@@ -588,7 +613,7 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
                 </g>
               )
             })}
-            {hoverIndex != null && crossX != null ? (
+            {hoverTime != null && crossX != null ? (
               <>
                 <line className="chart-cross" x1={crossX} y1={CHART_PAD.top} x2={crossX} y2={CHART_H - CHART_PAD.bottom} strokeWidth="1" />
                 {hoverBest ? (
@@ -604,11 +629,11 @@ function TrendChart({ title, subtitle, samples, models, metric, hidden, onToggle
               </>
             ) : null}
           </svg>
-          {hoverIndex != null && tipStyle ? (
+          {hoverTime != null && tipStyle ? (
             <div className="chart-tip show" role="presentation" style={tipStyle}>
               <div className="tip-head">
                 <em>{t(option.shortLabelKey)}</em>
-                <span>{hoverTime == null ? '—' : formatClock(hoverTime)}</span>
+                <span>{hoverTime == null ? '—' : formatTrendTime(hoverTime, includeDateInTimeLabel)}</span>
               </div>
               {tipRows.map((row) => (
                 <div className="tip-row" key={row.key}>

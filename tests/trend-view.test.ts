@@ -4,6 +4,7 @@ import {
   selectPreferredTrendModelsForLiveRanking,
   selectTrendModelsForLiveRanking,
   collectHoverRowsAtIndex,
+  collectHoverRowsAtTime,
   formatTrendModelName,
 } from '../src/domain/trend-view'
 
@@ -116,5 +117,21 @@ describe('collectHoverRowsAtIndex', () => {
     )
 
     expect(rows.map((row) => row.name)).toEqual(['Fast', 'Slow'])
+  })
+})
+
+describe('collectHoverRowsAtTime', () => {
+  it('uses each model point nearest to the shared hover time', () => {
+    const rows = collectHoverRowsAtTime(
+      [
+        { key: 'a', name: 'A', color: 'red', pts: [{ t: 1000, v: 10 }, { t: 2000, v: 20 }] },
+        { key: 'b', name: 'B', color: 'blue', pts: [{ t: 1300, v: 11 }, { t: 2300, v: 21 }] },
+      ],
+      1800,
+      'ttftMs' satisfies TrendMetricKey,
+    )
+
+    expect(rows.map((row) => row.name)).toEqual(['A', 'B'])
+    expect(rows.map((row) => row.value)).toEqual([20, 11])
   })
 })

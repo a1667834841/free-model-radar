@@ -21,7 +21,7 @@ import {
 import { AGENT_OPTIONS } from '@/domain/agent-config'
 import { highlightJson } from '@/lib/json-highlight'
 import { getProviderHomeUrl, getProviderIconUrl } from '@/lib/provider-icon'
-import { getTtftTierVar } from '@/lib/ttft-tier'
+import { getScoreTierVar } from '@/lib/score-tier'
 import { useI18n } from '../../i18n'
 import AgentConfigExport from '../export/agent-config-export'
 
@@ -257,13 +257,12 @@ export default function ModelEvaluation({
         const score = model.score
         const ratio = score != null && scoreMax > scoreMin ? (score - scoreMin) / (scoreMax - scoreMin) : 0
         const scorePct = ratio * 100
-        // 区带条按延迟档位着色（设计稿语义），宽度仍按综合分归一化
-        const ttft = model.ttftMs ?? model.latencyMs
+        // 长度和颜色都由综合分驱动，避免 TTFT 颜色与综合排行产生误导。
         return (
           <span className="m-band hide-sm">
               <span
                 className="m-band-fill"
-                style={{ '--ratio': Math.max(scorePct, 1) / 100, background: getTtftTierVar(ttft) } as CSSProperties}
+                style={{ '--ratio': Math.max(scorePct, 1) / 100, background: getScoreTierVar(score) } as CSSProperties}
               />
           </span>
         )
