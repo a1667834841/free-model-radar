@@ -169,6 +169,23 @@
         "attempts": 1,
         "timeoutMs": 25000
       }
+    },
+    {
+      "id": "flatkey",
+      "name": "Flatkey",
+      "baseUrl": "https://router.flatkey.ai/v1",
+      "secretName": "FLATKEY_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": [
+        "deepseek-v4-flash"
+      ],
+      "probe": {
+        "maxModels": 1,
+        "concurrency": 1,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
     }
   ]
 }

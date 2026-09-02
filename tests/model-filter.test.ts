@@ -154,4 +154,20 @@ describe('model filtering', () => {
 
     expect(selected.map((model) => model.id)).toEqual(['DeepSeek-V4-Flash'])
   })
+
+  it('selects the Flatkey DeepSeek V4 Flash candidate by model keyword', () => {
+    const flatkeyProvider: ProviderConfig = {
+      ...provider,
+      id: 'flatkey',
+      freeKeywords: ['deepseek-v4-flash'],
+      probe: { ...provider.probe, maxModels: 1 },
+    }
+    const selected = selectModelsForProbe(flatkeyProvider, [
+      { id: 'deepseek-v4-pro' },
+      { id: 'deepseek-v4-flash' },
+      { id: 'gpt-5.6-luna' },
+    ])
+
+    expect(selected.map((model) => model.id)).toEqual(['deepseek-v4-flash'])
+  })
 })

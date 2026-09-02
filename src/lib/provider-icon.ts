@@ -22,6 +22,7 @@ const PROVIDER_ICON_DOMAINS: Record<string, string> = {
   tokenharbor: 'tokenharbor.ai',
   groq: 'console.groq.com/favicon.ico',
   amd: 'developer.amd.com.cn/favicon.ico',
+  flatkey: 'router.flatkey.ai',
 }
 
 /**
@@ -48,6 +49,7 @@ const PROVIDER_HOME_URLS: Record<string, string> = {
   tokenharbor: 'https://tokenharbor.ai',
   groq: 'https://console.groq.com',
   amd: 'https://developer.amd.com.cn/radeon',
+  flatkey: 'https://console.flatkey.ai/sign-up?aff=EZkj',
 }
 
 export function normalizeProviderKey(value: string): string {

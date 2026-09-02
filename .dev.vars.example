@@ -8,3 +8,4 @@ ZENMUX_API_KEY=replace-with-your-zenmux-key
 NVIDIA_API_KEY=replace-with-your-nvidia-key
 GOROUTER_API_KEY=replace-with-your-gorouter-key
 AMD_API_KEY=replace-with-your-amd-key
+FLATKEY_API_KEY=replace-with-your-flatkey-key
