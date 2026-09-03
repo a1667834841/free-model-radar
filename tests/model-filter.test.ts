@@ -171,17 +171,4 @@ describe('model filtering', () => {
     expect(selected.map((model) => model.id)).toEqual(['deepseek-v4-flash'])
   })
 
-  it('selects KiosAPI free candidates by model keyword', () => {
-    const kiosProvider: ProviderConfig = {
-      ...provider,
-      id: 'kiosapi',
-      freeKeywords: ['free', ':free'],
-    }
-    const selected = selectModelsForProbe(kiosProvider, [
-      { id: 'paid-model' },
-      { id: 'free-model' },
-    ])
-
-    expect(selected.map((model) => model.id)).toEqual(['free-model'])
-  })
 })

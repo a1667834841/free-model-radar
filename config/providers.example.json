@@ -186,21 +186,6 @@
         "attempts": 1,
         "timeoutMs": 25000
       }
-    },
-    {
-      "id": "kiosapi",
-      "name": "KiosAPI",
-      "baseUrl": "https://kiosapi.com/v1",
-      "secretName": "KIOSAPI_API_KEY",
-      "enabled": true,
-      "modelStrategy": "free-first",
-      "freeKeywords": ["free", ":free"],
-      "probe": {
-        "maxModels": 20,
-        "concurrency": 3,
-        "attempts": 1,
-        "timeoutMs": 25000
-      }
     }
   ]
 }
