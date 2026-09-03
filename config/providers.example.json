@@ -186,6 +186,18 @@
         "attempts": 1,
         "timeoutMs": 25000
       }
+    },
+    {
+      "id": "cloudflare-workers-ai",
+      "name": "Cloudflare Workers AI",
+      "baseUrl": "https://api.cloudflare.com/client/v4",
+      "apiStyle": "cloudflare-workers-ai",
+      "accountId": "your-cloudflare-account-id",
+      "secretName": "CLOUDFLARE_WORKERS_AI_API_TOKEN",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": ["@cf/"],
+      "probe": { "maxModels": 20, "concurrency": 3, "attempts": 1, "timeoutMs": 25000 }
     }
   ]
 }

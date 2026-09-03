@@ -5,13 +5,18 @@ import { withTimeout } from '@/lib/timeout'
 
 function parseModelsPayload(payload: unknown): DiscoveredModel[] {
   if (!payload || typeof payload !== 'object') return []
-  const data = (payload as { data?: unknown }).data
+  const root = payload as { data?: unknown; result?: unknown }
+  const result = root.result
+  const data = Array.isArray(root.data) ? root.data :
+    (result && typeof result === 'object' && Array.isArray((result as { data?: unknown }).data)
+      ? (result as { data: unknown[] }).data : result)
   if (!Array.isArray(data)) return []
 
   return data
     .map((item) => {
       if (!item || typeof item !== 'object') return null
-      const id = (item as { id?: unknown }).id
+      const record = item as { id?: unknown; model_id?: unknown; name?: unknown; task?: unknown }
+      const id = record.id ?? record.model_id ?? record.name
       if (typeof id !== 'string' || !id.trim()) return null
 
       const pricing = (item as { pricing?: unknown }).pricing
@@ -24,6 +29,7 @@ function parseModelsPayload(payload: unknown): DiscoveredModel[] {
         pricings: pricings && typeof pricings === 'object' ? pricings as DiscoveredModel['pricings'] : null,
         hasFreeRoute: typeof hasFreeRoute === 'boolean' ? hasFreeRoute : null,
         isFree: typeof isFree === 'boolean' ? isFree : null,
+        task: typeof record.task === 'string' ? record.task : null,
       }
       return model
     })
@@ -32,7 +38,9 @@ function parseModelsPayload(payload: unknown): DiscoveredModel[] {
 
 export async function discoverModels(provider: ProviderConfig, apiKey: string, fetchImpl: typeof fetch = fetch): Promise<DiscoveredModel[]> {
   const startedAt = Date.now()
-  const url = new URL(provider.baseUrl.replace(/\/$/, '') + '/models')
+  const url = provider.apiStyle === 'cloudflare-workers-ai'
+    ? new URL(`${provider.baseUrl.replace(/\/$/, '')}/accounts/${provider.accountId}/ai/models/search?format=openrouter`)
+    : new URL(provider.baseUrl.replace(/\/$/, '') + '/models')
 
   const response = await withTimeout(
     (signal) => fetchImpl(url, {

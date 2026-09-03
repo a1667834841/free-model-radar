@@ -12,6 +12,7 @@ export type DiscoveredModel = {
   pricings?: Record<string, Array<{ value?: unknown; unit?: unknown; currency?: unknown }>> | null
   hasFreeRoute?: boolean | null
   isFree?: boolean | null
+  task?: string | null
 }
 
 const FALLBACK_ALL_MODEL_LIMIT = 20
@@ -28,7 +29,7 @@ function isZeroPrice(value: string | number | null | undefined): boolean {
 }
 
 function hasProviderSpecificFreeSignal(provider: ProviderConfig): boolean {
-  return provider.id === 'openrouter' || provider.id === 'rntm' || provider.id === 'gmicloud' || provider.id === 'zenmux' || provider.id === 'nvidia'
+  return provider.id === 'openrouter' || provider.id === 'rntm' || provider.id === 'gmicloud' || provider.id === 'zenmux' || provider.id === 'nvidia' || provider.id === 'cloudflare-workers-ai'
 }
 
 function getFirstPricingValue(list: Array<{ value?: unknown; unit?: unknown; currency?: unknown }> | undefined): number | null {
@@ -56,12 +57,15 @@ function isProviderSpecificFreeModel(provider: ProviderConfig, model: Discovered
       return model.isFree === true
     case 'zenmux':
       return isZenmuxFreeModel(model)
+    case 'cloudflare-workers-ai':
+      return model.id.startsWith('@cf/') && (!model.task || /text-generation|text generation|chat|conversational/i.test(model.task))
     default:
       return false
   }
 }
 
 function isCandidateFreeModel(provider: ProviderConfig, model: DiscoveredModel): boolean {
+  if (provider.id === 'cloudflare-workers-ai') return isProviderSpecificFreeModel(provider, model)
   return isProviderSpecificFreeModel(provider, model) || isFreeModel(model.id, provider.freeKeywords)
 }
 

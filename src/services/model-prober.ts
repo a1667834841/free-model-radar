@@ -95,6 +95,16 @@ function extractTokenUsage(payload: unknown): TokenUsage {
   }
 }
 
+function extractCloudflareResponse(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const result = (payload as { result?: unknown }).result
+  if (result && typeof result === 'object') {
+    const response = (result as { response?: unknown }).response
+    return typeof response === 'string' && response.trim() ? response : null
+  }
+  return typeof result === 'string' && result.trim() ? result : null
+}
+
 function parseSseChunk(line: string): unknown | null {
   const trimmed = line.trim()
   if (!trimmed.startsWith('data:')) return null
@@ -185,6 +195,22 @@ async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: stri
   const startedAt = Date.now()
   const probePrompt = buildProbePrompt()
   const { content, ttftMs, latencyMs, tokenUsage } = await withTimeout(async (signal) => {
+    if (provider.apiStyle === 'cloudflare-workers-ai') {
+      if (!provider.accountId) throw new Error('Cloudflare Workers AI provider requires accountId')
+      const response = await fetchImpl(`${provider.baseUrl.replace(/\/$/, '')}/accounts/${provider.accountId}/ai/run/${encodeURI(modelId)}`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: probePrompt }], max_tokens: 256 }),
+        signal,
+      })
+      if (response.status !== 200) {
+        console.log(`[probe:${provider.id}/${modelId}] HTTP ${response.status} after ${Date.now() - startedAt}ms`)
+        throw new Error(`Probe failed with HTTP ${response.status}`)
+      }
+      const content = extractCloudflareResponse(await readJsonResponse(response))
+      const latencyMs = Date.now() - startedAt
+      return { content: content ?? '', ttftMs: latencyMs, latencyMs, tokenUsage: { promptTokens: null, completionTokens: null, totalTokens: null } }
+    }
     const response = await fetchImpl(provider.baseUrl.replace(/\/$/, '') + '/chat/completions', {
       method: 'POST',
       headers: {
@@ -256,6 +282,7 @@ export async function probeModel(provider: ProviderConfig, apiKey: string, model
 
 export const modelProberInternals = {
   extractAssistantContent,
+  extractCloudflareResponse,
   extractTokenUsage,
   extractDeltaContent,
   computeTokensPerSec,

@@ -4,6 +4,8 @@ export const providerConfigSchema = z.object({
   id: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]*$/),
   name: z.string().min(1),
   baseUrl: z.string().url().refine((value) => new URL(value).protocol === 'https:', 'baseUrl must use https'),
+  apiStyle: z.enum(['openai', 'cloudflare-workers-ai']).optional(),
+  accountId: z.string().min(1).optional(),
   secretName: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
   enabled: z.boolean().default(true),
   modelStrategy: z.enum(['free-first']),

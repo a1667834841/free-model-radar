@@ -23,6 +23,7 @@ const PROVIDER_ICON_DOMAINS: Record<string, string> = {
   groq: 'console.groq.com/favicon.ico',
   amd: 'developer.amd.com.cn/favicon.ico',
   flatkey: 'router.flatkey.ai',
+  'cloudflare-workers-ai': 'cloudflare.com',
 }
 
 /**
@@ -50,6 +51,7 @@ const PROVIDER_HOME_URLS: Record<string, string> = {
   groq: 'https://console.groq.com',
   amd: 'https://developer.amd.com.cn/radeon',
   flatkey: 'https://console.flatkey.ai/sign-up?aff=EZkj',
+  'cloudflare-workers-ai': 'https://dash.cloudflare.com',
 }
 
 export function normalizeProviderKey(value: string): string {

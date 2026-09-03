@@ -14,6 +14,13 @@ const provider: ProviderConfig = {
 }
 
 describe('model filtering', () => {
+  it('selects Cloudflare text-generation models from the account catalog', () => {
+    const cloudflareProvider: ProviderConfig = { ...provider, id: 'cloudflare-workers-ai', apiStyle: 'cloudflare-workers-ai', accountId: 'account', freeKeywords: ['@cf/'] }
+    expect(selectModelsForProbe(cloudflareProvider, [
+      { id: '@cf/meta/llama-3.1-8b-instruct', task: 'Text Generation' },
+      { id: '@cf/invalid/embedding', task: 'Text Embeddings' },
+    ]).map((model) => model.id)).toEqual(['@cf/meta/llama-3.1-8b-instruct'])
+  })
   it('detects free models by configured keywords', () => {
     expect(isFreeModel('qwen/qwen3:free', provider.freeKeywords)).toBe(true)
     expect(isFreeModel('gemini-flash', provider.freeKeywords)).toBe(false)
