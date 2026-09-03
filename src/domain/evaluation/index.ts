@@ -19,6 +19,7 @@ export {
   computeRrfScore,
   DEFAULT_EVALUATION_METHOD_ID,
   getEvaluationMethod,
+  hasPreferredModelKeyword,
   listEvaluationMethods,
   normalizeRrfScore,
   RRF_K,

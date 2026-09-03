@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeRrfScore, findFastestTtftModel, findModelBest, getEvaluationMethod, normalizeRrfScore } from '@/domain/evaluation'
+import { computeRrfScore, findFastestTtftModel, findModelBest, getEvaluationMethod, hasPreferredModelKeyword, normalizeRrfScore } from '@/domain/evaluation'
 import type { FlattenedModel } from '@/domain/evaluation'
 
 function makeModel(overrides: Partial<FlattenedModel> & Pick<FlattenedModel, 'id' | 'providerId' | 'providerName'>): FlattenedModel {
@@ -91,6 +91,20 @@ describe('streaming performance evaluation', () => {
     expect(ranked.find((model) => model.id === 'estimated')?.tpsQuality).toBe('estimated')
     expect(ranked[0].id).toBe('measured')
     expect(ranked.find((model) => model.id === 'estimated')?.score).toBeLessThan(ranked.find((model) => model.id === 'measured')?.score ?? Infinity)
+  })
+
+  it('promotes preferred model families and demotes unrecognized names', () => {
+    expect(hasPreferredModelKeyword('anthropic/claude-sonnet-4')).toBe(true)
+    expect(hasPreferredModelKeyword('custom-model')).toBe(false)
+
+    const method = getEvaluationMethod('streaming-performance')
+    const ranked = method.rank([
+      makeModel({ id: 'custom-model', providerId: 'a', providerName: 'A', ttftMs: 250, tokensPerSec: 40, latencyMs: 1100 }),
+      makeModel({ id: 'qwen3.5', providerId: 'b', providerName: 'B' }),
+    ])
+
+    expect(ranked[0].id).toBe('qwen3.5')
+    expect(ranked[0].score).toBeGreaterThan(ranked[1].score ?? 0)
   })
 
   it('finds fastest TTFT independently from composite ranking', () => {

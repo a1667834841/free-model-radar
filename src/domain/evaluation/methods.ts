@@ -5,6 +5,9 @@ export const RRF_K = 60
 const RRF_METRIC_WEIGHTS = [1, 2, 1] as const
 const HIGH_TPS_THRESHOLD = 300
 const HIGH_TPS_WEIGHT = 0.5
+const PREFERRED_MODEL_KEYWORDS = ['gemini', 'claude', 'gpt', 'deepseek', 'glm', 'mimo', 'minimax', 'hy', 'qwen'] as const
+const PREFERRED_MODEL_BONUS = 0.08
+const UNRECOGNIZED_MODEL_PENALTY = 0.15
 
 /**
  * Calculate a Reciprocal Rank Fusion score from one or more metric ranks.
@@ -46,6 +49,22 @@ function tieBreakModels(a: FlattenedModel, b: FlattenedModel): number {
 
 function modelKey(model: FlattenedModel): string {
   return `${model.providerId}:${model.id}`
+}
+
+export function hasPreferredModelKeyword(modelId: string): boolean {
+  const normalized = modelId.toLowerCase()
+  return PREFERRED_MODEL_KEYWORDS.some((keyword) => normalized.includes(keyword))
+}
+
+function applyPreferredModelBonus(score: number, modelId: string): number {
+  if (!hasPreferredModelKeyword(modelId)) {
+    // Keep unknown/special-purpose model names visible, but keep them below
+    // recognizable general-purpose model families when performance is close.
+    return score * (1 - UNRECOGNIZED_MODEL_PENALTY)
+  }
+  // Pull preferred model families 8% closer to the maximum without allowing
+  // the bonus to push normalized scores above 100.
+  return score + (100 - score) * PREFERRED_MODEL_BONUS
 }
 
 function rankByMetric(
@@ -106,7 +125,8 @@ function computeStreamingRrfScores(models: FlattenedModel[]): Map<string, number
       weights.push(RRF_METRIC_WEIGHTS[2])
     }
 
-    return [key, normalizeRrfScore(computeRrfScore(ranks, weights))]
+    const baseScore = normalizeRrfScore(computeRrfScore(ranks, weights))
+    return [key, applyPreferredModelBonus(baseScore, model.id)]
   }))
 }
 
