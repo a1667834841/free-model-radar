@@ -26,6 +26,7 @@ A model availability and latency radar running on Cloudflare Workers.
 | **AIHubMix** | No check-in. Free models are documented as requiring no card and having no trial expiry, with per-model RPM and daily token caps reset daily. [Free models](https://docs.aihubmix.com/en/blogs/free-ai-models) | [Website](https://aihubmix.com/?aff=FqPM) |
 | **AMD Radeon Cloud** | Requires an AMD developer account and API key. The current catalog reports `free: false` with positive prices; verify the account's current access policy before treating the target model as free. | [Radeon Cloud](https://developer.amd.com.cn/radeon) |
 | **Flatkey** | 控制台将 `deepseek-v4-flash` 标记为免费；当前仅探测该模型。 | [注册](https://console.flatkey.ai/sign-up?aff=EZkj) |
+| **KiosAPI** | API 端点已接入；当前 `/models` 返回空列表，暂未发现可探测模型。 | [Keys](https://kiosapi.com/keys) |
 | **Bynara** | No check-in. The free tier uses per-minute request limits and a daily token quota, normally reset daily in UTC. [Docs](https://router.bynara.id/docs) | [Website](https://router.bynara.id) |
 | **OpenCode ZEN** | No check-in. Free models are time-limited; sign-in and billing details are required, while other models are pay-per-request. [ZEN docs](https://dev.opencode.ai/docs/zen/) | [Website](https://opencode.ai) |
 | **Token Harbor** | No check-in. Free usage is a value-based allowance in a rolling 7-day period; there is no welcome credit and no card is required. [FAQ](https://tokenharbor.ai/faq) | [Website](https://tokenharbor.ai) |
