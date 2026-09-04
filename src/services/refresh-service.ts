@@ -225,7 +225,7 @@ export async function processRefreshMessage(env: RadarEnv, queue: Queue<RefreshQ
       log(refreshId, 'queue: refresh finished')
     }
   } finally {
-    await releaseRefreshLock(env.RADAR_KV)
+    await releaseRefreshLock(env.RADAR_KV, refreshId)
   }
 }
 

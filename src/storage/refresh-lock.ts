@@ -44,8 +44,17 @@ export async function acquireRefreshLock(kv: KVNamespace, refreshId: string, now
   return true
 }
 
-export async function releaseRefreshLock(kv: KVNamespace): Promise<void> {
+export async function releaseRefreshLock(kv: KVNamespace, refreshId: string): Promise<void> {
   const startedAt = Date.now()
+  const current = await getCurrentLock(kv)
+  if (!current) return
+
+  const lock = JSON.parse(current) as RefreshLock
+  if (lock.refreshId !== refreshId) {
+    console.log(`[lock] release(${refreshId}) SKIPPED: now held by ${lock.refreshId} (get took ${Date.now() - startedAt}ms)`)
+    return
+  }
+
   await kv.delete(KV_KEYS.refreshLock)
-  console.log(`[lock] release took ${Date.now() - startedAt}ms`)
+  console.log(`[lock] release(${refreshId}) took ${Date.now() - startedAt}ms`)
 }

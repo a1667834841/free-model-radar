@@ -12,6 +12,29 @@ describe('model health', () => {
     expect(state['provider-a:model-a'].requestFailureCount).toBe(30)
   })
 
+  it('never hides a model because of repeated rate limits or transient failures', () => {
+    let state: ModelHealthState = {}
+    for (let index = 0; index < 40; index += 1) {
+      state = recordModelFailure(state, 'provider-a', 'limited-model', `2026-08-27T09:00:${String(index % 60).padStart(2, '0')}.000Z`, 'rate_limited')
+      state = recordModelFailure(state, 'provider-a', 'timeout-model', `2026-08-27T09:00:${String(index % 60).padStart(2, '0')}.000Z`, 'transient_failure')
+    }
+
+    expect(isModelHidden(state, 'provider-a', 'limited-model')).toBe(false)
+    expect(isModelHidden(state, 'provider-a', 'timeout-model')).toBe(false)
+    expect(state['provider-a:limited-model'].requestFailureCount).toBe(40)
+    expect(state['provider-a:timeout-model'].requestFailureCount).toBe(40)
+  })
+
+  it('re-enables legacy hidden records whose last failure was temporary', () => {
+    const base = {
+      providerId: 'provider-a', modelId: 'model-a', consecutiveFailures: 30, requestFailureCount: 30,
+      hidden: true, hiddenReason: 'thirty-consecutive-failures' as const, lastCheckedAt: '2026-08-27T09:00:00.000Z',
+    }
+    expect(isModelHidden({ 'provider-a:model-a': { ...base, lastStatus: 'rate_limited' } }, 'provider-a', 'model-a')).toBe(false)
+    expect(isModelHidden({ 'provider-a:model-a': { ...base, lastStatus: 'transient_failure' } }, 'provider-a', 'model-a')).toBe(false)
+    expect(isModelHidden({ 'provider-a:model-a': { ...base, lastStatus: 'permanent_failure' } }, 'provider-a', 'model-a')).toBe(true)
+  })
+
   it('resets request failure count after success', () => {
     let state: ModelHealthState = {}
     for (let index = 0; index < 29; index += 1) {

@@ -27,7 +27,10 @@ export function modelHealthKey(providerId: string, modelId: string): string {
 }
 
 export function isModelHidden(state: ModelHealthState, providerId: string, modelId: string): boolean {
-  return state[modelHealthKey(providerId, modelId)]?.hidden === true
+  const record = state[modelHealthKey(providerId, modelId)]
+  if (!record?.hidden) return false
+  // 兼容线上旧记录：429/超时是暂时状态，不能永久隐藏模型。
+  return record.lastStatus !== 'rate_limited' && record.lastStatus !== 'transient_failure'
 }
 
 function elapsedSince(checkedAt: string | null | undefined, now: Date): number | null {
@@ -86,7 +89,11 @@ export function recordModelSuccess(state: ModelHealthState, providerId: string, 
 export function recordModelFailure(state: ModelHealthState, providerId: string, modelId: string, checkedAt: string, status: ModelHealthStatus = 'permanent_failure'): ModelHealthState {
   const key = modelHealthKey(providerId, modelId)
   const previous = state[key]
-  const requestFailureCount = (previous?.requestFailureCount ?? previous?.consecutiveFailures ?? 0) + 1
+  const previousFailureCount = previous?.requestFailureCount ?? previous?.consecutiveFailures ?? 0
+  const requestFailureCount = previous?.lastStatus === status || previous?.lastStatus === undefined
+    ? previousFailureCount + 1
+    : 1
+  const hidden = status === 'permanent_failure' && requestFailureCount >= MAX_CONSECUTIVE_REQUEST_FAILURES
   return {
     ...state,
     [key]: {
@@ -94,8 +101,8 @@ export function recordModelFailure(state: ModelHealthState, providerId: string, 
       modelId,
       consecutiveFailures: requestFailureCount,
       requestFailureCount,
-      hidden: requestFailureCount >= MAX_CONSECUTIVE_REQUEST_FAILURES,
-      hiddenReason: requestFailureCount >= MAX_CONSECUTIVE_REQUEST_FAILURES ? 'thirty-consecutive-failures' : null,
+      hidden,
+      hiddenReason: hidden ? 'thirty-consecutive-failures' : null,
       lastCheckedAt: checkedAt,
       lastStatus: status,
     },
