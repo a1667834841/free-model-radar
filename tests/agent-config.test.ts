@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AGENT_OPTIONS, makeAgentConfigContext } from '@/domain/agent-config'
+import { AGENT_OPTIONS, getFreeModelIds, makeAgentConfigContext } from '@/domain/agent-config'
 
 const ctx = makeAgentConfigContext({
   providerId: 'openrouter',
@@ -10,6 +10,14 @@ const ctx = makeAgentConfigContext({
 })
 
 describe('agent config generation', () => {
+  it('collects free model ids across all providers for the global export', () => {
+    expect(getFreeModelIds([
+      { id: 'provider-a/model-1', freeStatus: 'free' },
+      { id: 'provider-a/model-2', freeStatus: 'available' },
+      { id: 'provider-b/model-3', freeStatus: 'free' },
+    ])).toEqual(['provider-a/model-1', 'provider-b/model-3'])
+  })
+
   it('covers all documented agents', () => {
     const ids = AGENT_OPTIONS.map((option) => option.id)
     expect(ids).toEqual(['claude-code', 'codex', 'opencode', 'gemini-cli', 'zed', 'cursor'])

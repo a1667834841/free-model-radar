@@ -23,6 +23,10 @@ export type AgentOption = {
 
 const FALLBACK_SECRET = 'OPENAI_API_KEY'
 
+export function getFreeModelIds(models: Array<{ id: string; freeStatus: 'free' | 'available' }>): string[] {
+  return models.filter((model) => model.freeStatus === 'free').map((model) => model.id)
+}
+
 function apiKeyPlaceholder(secretName: string): string {
   return `<YOUR_${secretName || FALLBACK_SECRET}>`
 }

@@ -47,6 +47,13 @@ function formatMs(value: number | null | undefined): string {
   return `${value.toLocaleString()} ms`
 }
 
+function matchesSearch(model: { id: string; providerName: string }, query: string): boolean {
+  const tokens = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return true
+  const haystack = `${model.id} ${model.providerName}`.toLocaleLowerCase()
+  return tokens.every((token) => haystack.includes(token))
+}
+
 type ModelTableRow = RankedModel
 
 const modelTableFeatures = tableFeatures({})
@@ -62,6 +69,10 @@ export default function ModelEvaluation({
   const method = getEvaluationMethod(DEFAULT_EVALUATION_METHOD_ID)
   const [exportTarget, setExportTarget] = useState('free-ids')
   const [copySignal, setCopySignal] = useState(0)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchActiveIndex, setSearchActiveIndex] = useState(0)
+  const searchContainerRef = useRef<HTMLDivElement>(null)
 
   const rankedModels = useMemo(() => method.rank(models), [models, method])
   const modelBest = useMemo(() => findModelBest(models), [models])
@@ -105,7 +116,29 @@ export default function ModelEvaluation({
     return grouped
   }, [rankedModels, providers, view])
 
-  const firstRowId = modelRows[0] ? `${modelRows[0].providerId}:${modelRows[0].id}` : null
+  const visibleModelRows = useMemo(() => {
+    return modelRows.filter((model) => matchesSearch(model, searchQuery))
+  }, [modelRows, searchQuery])
+
+  const searchSuggestions = useMemo(
+    () => rankedModels.filter((model) => matchesSearch(model, searchQuery)).slice(0, 8),
+    [rankedModels, searchQuery],
+  )
+
+  useEffect(() => {
+    setSearchActiveIndex(0)
+  }, [searchQuery])
+
+  useEffect(() => {
+    if (!searchOpen) return
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!searchContainerRef.current?.contains(event.target as Node)) setSearchOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [searchOpen])
+
+  const firstRowId = visibleModelRows[0] ? `${visibleModelRows[0].providerId}:${visibleModelRows[0].id}` : null
   useEffect(() => {
     if (!firstRowId) return
     setRowOpenMap((prev) => (firstRowId in prev ? prev : { ...prev, [firstRowId]: true }))
@@ -114,7 +147,7 @@ export default function ModelEvaluation({
   // 数据集结构对齐设计稿 buildDataset（下划线命名）；数据全部来自真实 props。
   const rankingDataset = useMemo(() => {
     if (!jsonBuilt) return null
-    const latestCheckedAt = modelRows.reduce((acc, m) => (m.checkedAt > acc ? m.checkedAt : acc), '')
+    const latestCheckedAt = visibleModelRows.reduce((acc, m) => (m.checkedAt > acc ? m.checkedAt : acc), '')
     return {
       meta: {
         title: t('table.title'),
@@ -126,7 +159,7 @@ export default function ModelEvaluation({
           ? new Date(latestCheckedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')
           : null,
       },
-      models: modelRows.map((model, i) => ({
+      models: visibleModelRows.map((model, i) => ({
         rank: i + 1,
         name: model.id,
         ttft_ms: model.ttftMs ?? model.latencyMs,
@@ -136,7 +169,7 @@ export default function ModelEvaluation({
         scale: null,
       })),
     }
-  }, [jsonBuilt, modelRows, method, t, locale])
+  }, [jsonBuilt, visibleModelRows, method, t, locale])
 
   const handleToggleJson = useCallback(() => {
     setJsonBuilt(true)
@@ -321,7 +354,7 @@ export default function ModelEvaluation({
 
   const table = useTable({
     features: modelTableFeatures,
-    data: modelRows,
+    data: visibleModelRows,
     columns,
     getRowId: (row) => `${row.providerId}:${row.id}`,
   })
@@ -447,30 +480,125 @@ export default function ModelEvaluation({
             </span>
           </button>
         </div>
-        <div className="export-bar">
-          <label className="export-control" htmlFor="agent-export-select">
-            <span className="mono-eyebrow">{t('agent.label')}</span>
-          </label>
-          <select
-            id="agent-export-select"
-            className="export-select"
-            value={exportTarget}
-            onChange={(e) => {
-              setExportTarget(e.target.value)
-            }}
-          >
-            <option value="free-ids">{t('agent.modelIds')}</option>
-            {AGENT_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </select>
-          <button
-            className="btn btn-ghost export-btn"
-            type="button"
-            onClick={() => setCopySignal((signal) => signal + 1)}
-          >
-            {t('agent.copy')}
-          </button>
+        <div className="evaluation-tools">
+          <div className="model-search-wrap" ref={searchContainerRef}>
+            <label className="model-search" htmlFor="model-search-input">
+              <svg className="model-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4" />
+                <path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              <span className="sr-only">{t('search.label')}</span>
+              <input
+                id="model-search-input"
+                type="search"
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value)
+                  setSearchOpen(Boolean(event.target.value.trim()))
+                }}
+                onFocus={() => setSearchOpen(Boolean(searchQuery.trim()))}
+                onKeyDown={(event) => {
+                  if (!searchOpen || searchSuggestions.length === 0) {
+                    if (event.key === 'Escape') setSearchOpen(false)
+                    return
+                  }
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault()
+                    setSearchActiveIndex((index) => (index + 1) % searchSuggestions.length)
+                  } else if (event.key === 'ArrowUp') {
+                    event.preventDefault()
+                    setSearchActiveIndex((index) => (index - 1 + searchSuggestions.length) % searchSuggestions.length)
+                  } else if (event.key === 'Enter') {
+                    event.preventDefault()
+                    const suggestion = searchSuggestions[searchActiveIndex]
+                    if (suggestion) {
+                      setSearchQuery(suggestion.id)
+                      setSearchOpen(false)
+                    }
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault()
+                    setSearchOpen(false)
+                  }
+                }}
+                placeholder={t('search.placeholder')}
+                autoComplete="off"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={searchOpen && searchSuggestions.length > 0}
+                aria-controls="model-search-suggestions"
+                aria-activedescendant={searchOpen && searchSuggestions[searchActiveIndex]
+                  ? `model-search-option-${searchSuggestions[searchActiveIndex].providerId}-${searchActiveIndex}`
+                  : undefined}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="model-search-clear"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setSearchOpen(false)
+                  }}
+                  aria-label={t('search.clear')}
+                >
+                  ×
+                </button>
+              )}
+            </label>
+            <span className="model-search-count">
+              {searchQuery.trim() ? t('search.matchCount', { count: visibleModelRows.length }) : t('search.totalCount', { count: modelRows.length })}
+            </span>
+            {searchOpen && searchSuggestions.length > 0 && (
+              <div id="model-search-suggestions" className="model-search-dropdown" role="listbox" aria-label={t('search.suggestions')}>
+                {searchSuggestions.map((model, index) => (
+                  <button
+                    key={`${model.providerId}:${model.id}`}
+                    id={`model-search-option-${model.providerId}-${index}`}
+                    type="button"
+                    className={`model-search-option${index === searchActiveIndex ? ' active' : ''}`}
+                    role="option"
+                    aria-selected={index === searchActiveIndex}
+                    onMouseEnter={() => setSearchActiveIndex(index)}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                      setSearchQuery(model.id)
+                      setSearchOpen(false)
+                    }}
+                  >
+                    <span className="model-search-option-main">
+                      <strong>{model.id}</strong>
+                      <small>{model.providerName}</small>
+                    </span>
+                    <span className="model-search-option-meta">{formatMs(model.ttftMs)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="export-bar">
+            <label className="export-control" htmlFor="agent-export-select">
+              <span className="mono-eyebrow">{t('agent.label')}</span>
+            </label>
+            <select
+              id="agent-export-select"
+              className="export-select"
+              value={exportTarget}
+              onChange={(e) => {
+                setExportTarget(e.target.value)
+              }}
+            >
+              <option value="free-ids">{t('agent.modelIds')}</option>
+              {AGENT_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+            <button
+              className="btn btn-ghost export-btn"
+              type="button"
+              onClick={() => setCopySignal((signal) => signal + 1)}
+            >
+              {t('agent.copy')}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -524,6 +652,14 @@ export default function ModelEvaluation({
             <span className="empty-icon">⌁</span>
             <strong>{t('empty.models.title')}</strong>
             <span>{t('empty.models.desc')}</span>
+          </div>
+        )}
+
+        {modelRows.length > 0 && visibleModelRows.length === 0 && (
+          <div className="empty-state model-search-empty">
+            <span className="empty-icon">⌕</span>
+            <strong>{t('search.noResultsTitle')}</strong>
+            <span>{t('search.noResultsDesc')}</span>
           </div>
         )}
 

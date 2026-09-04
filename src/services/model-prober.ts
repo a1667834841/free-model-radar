@@ -269,6 +269,10 @@ export async function probeModel(provider: ProviderConfig, apiKey: string, model
       return await probeOnce(provider, apiKey, modelId, fetchImpl)
     } catch (error) {
       lastError = safeErrorMessage(error)
+      // 中转站常对同一 Provider 做突发请求限流；退避只针对 429，避免把瞬时限流记成永久失败。
+      if (lastError.includes('HTTP 429') && attempt + 1 < provider.probe.attempts) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
+      }
     }
   }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../i18n'
 import {
   AGENT_OPTIONS,
+  getFreeModelIds,
   makeAgentConfigContext,
 } from '@/domain/agent-config'
 import type { ProviderResult } from '@/domain/result'
@@ -71,6 +72,7 @@ export default function AgentConfigExport({ providers, models, exportTarget, cop
   const freeModels = useMemo(() => {
     return models.filter((m) => m.providerId === selectedProviderId && m.freeStatus === 'free')
   }, [models, selectedProviderId])
+  const allFreeModelIds = useMemo(() => getFreeModelIds(models), [models])
 
   // 切换 Provider 时，默认选中该 Provider 第一个免费模型
   useEffect(() => {
@@ -158,13 +160,13 @@ export default function AgentConfigExport({ providers, models, exportTarget, cop
     if (lastAutoTarget.current === autoKey) return
     lastAutoTarget.current = autoKey
     if (exportTarget === 'free-ids') {
-      const text = freeModels.map((m) => m.id).join('\n')
+      const text = (compact ? allFreeModelIds : freeModels.map((m) => m.id)).join('\n')
       if (text) handleCopy(text, 'all-models')
       return
     }
     const target = agentConfigs.find((a) => a.option.id === exportTarget)
     if (target) handleCopy(target.content, exportTarget)
-  }, [exportTarget, copySignal, agentConfigs, freeModels, handleCopy])
+  }, [exportTarget, copySignal, agentConfigs, freeModels, allFreeModelIds, compact, handleCopy])
 
   if (exportableProviders.length === 0) {
     if (compact) return null
