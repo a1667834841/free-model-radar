@@ -26,6 +26,8 @@ const PROVIDER_ICON_DOMAINS: Record<string, string> = {
   'cloudflare-workers-ai': 'cloudflare.com',
 }
 
+export const AIHUBMIX_REGISTER_URL = 'https://aihubmix.com/?aff=FqPM'
+
 /**
  * 厂商官网首页 URL 的显式映射。
  *
@@ -40,7 +42,7 @@ const PROVIDER_HOME_URLS: Record<string, string> = {
   sensenova: 'https://www.sensenova.cn',
   'b-ai': 'https://chat.b.ai/chat?invite_code=ATZT6T',
   rntm: 'https://rntm.sh',
-  aihubmix: 'https://aihubmix.com/?aff=FqPM',
+  aihubmix: AIHUBMIX_REGISTER_URL,
   opencode: 'https://opencode.ai',
   justwoker: 'https://api.justwoker.icu/register?aff=BHmu',
   gmicloud: 'https://console.gmicloud.ai',
@@ -69,6 +71,12 @@ export function getProviderHomeUrl(provider?: ProviderLike): string | null {
   if (explicit) return explicit
   if (!provider.baseUrl) return null
   return provider.baseUrl.replace(/\/+$/, '').replace(/\/v1$/i, '')
+}
+
+export function getProviderRegistrationUrl(provider?: ProviderLike, registerUrl?: string | null): string | null {
+  const explicit = registerUrl?.trim()
+  if (explicit) return explicit
+  return getProviderHomeUrl(provider)
 }
 
 export function getProviderIconUrl(

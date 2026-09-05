@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../i18n'
 import type { Locale, MessageKey } from '../../i18n'
-import { getProviderHomeUrl, getProviderIconUrl } from '@/lib/provider-icon'
+import { AIHUBMIX_REGISTER_URL, getProviderIconUrl, getProviderRegistrationUrl } from '@/lib/provider-icon'
 import type { ProviderResult } from '@/domain/result'
 
 type ProviderGuideModalProps = {
@@ -89,7 +89,7 @@ const PROVIDER_GUIDES: Record<string, ProviderGuideContent> = {
     images: [{ src: '/provider-guides/rntm.jpg', caption: copy('BTL Runtime 配置示例', 'BTL Runtime configuration example') }],
   },
   aihubmix: {
-    registerUrl: 'https://aihubmix.com/?aff=FqPM',
+    registerUrl: AIHUBMIX_REGISTER_URL,
     registerDetail: copy('通过邀请链接注册，使用前需先充值少量金额以通过防滥用机制。', 'Register with the invite link; a small top-up is required by the anti-abuse policy.'),
     keyDetail: copy('在后台创建 API Key，调用时选择带 free 标签的模型。', 'Create an API key in the dashboard and choose models marked free.'),
     highlights: [
@@ -308,7 +308,7 @@ export default function ProviderGuideModal({ provider, onClose }: ProviderGuideM
       images: [],
     }
   }, [provider])
-  const homeUrl = useMemo(() => guide?.registerUrl ?? getProviderHomeUrl(provider ?? undefined), [guide, provider])
+  const homeUrl = useMemo(() => getProviderRegistrationUrl(provider ?? undefined, guide?.registerUrl), [guide, provider])
   const iconUrl = useMemo(() => provider ? getProviderIconUrl(provider, homeUrl) : null, [homeUrl, provider])
   const keyPath = provider ? KEY_PATHS[normalizeProviderId(provider.id)] ?? 'Console → API Keys' : ''
   const statusKey = provider ? `status.${provider.status}` as MessageKey : null
