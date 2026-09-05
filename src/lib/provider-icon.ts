@@ -24,6 +24,7 @@ const PROVIDER_ICON_DOMAINS: Record<string, string> = {
   amd: 'developer.amd.com.cn/favicon.ico',
   flatkey: 'router.flatkey.ai',
   'cloudflare-workers-ai': 'cloudflare.com',
+  'experiential-labs': 'platform.experientiallabs.ai',
 }
 
 export const AIHUBMIX_REGISTER_URL = 'https://aihubmix.com/?aff=FqPM'
@@ -54,6 +55,7 @@ const PROVIDER_HOME_URLS: Record<string, string> = {
   amd: 'https://developer.amd.com.cn/radeon',
   flatkey: 'https://console.flatkey.ai/sign-up?aff=EZkj',
   'cloudflare-workers-ai': 'https://dash.cloudflare.com',
+  'experiential-labs': 'https://platform.experientiallabs.ai/',
 }
 
 export function normalizeProviderKey(value: string): string {

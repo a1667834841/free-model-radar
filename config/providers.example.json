@@ -198,6 +198,16 @@
       "modelStrategy": "free-first",
       "freeKeywords": ["@cf/"],
       "probe": { "maxModels": 20, "concurrency": 3, "attempts": 1, "timeoutMs": 25000 }
+    },
+    {
+      "id": "experiential-labs",
+      "name": "Experiential Labs",
+      "baseUrl": "https://api.experientiallabs.ai/v1",
+      "secretName": "EXPERIENTIAL_LABS_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": ["free", "qwen3.8-27b", "deepseek-v4-flash", "gpt-5.6-luna", "gpt-6-astra"],
+      "probe": { "maxModels": 20, "concurrency": 3, "attempts": 1, "timeoutMs": 25000 }
     }
   ]
 }
