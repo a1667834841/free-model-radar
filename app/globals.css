@@ -1899,7 +1899,7 @@ svg {
   color: var(--accent);
 }
 
-.gh-link {
+.social-link {
   display: grid;
   place-items: center;
   width: 34px;
@@ -1911,9 +1911,13 @@ svg {
   transition: color .2s, border-color .2s;
 }
 
-.gh-link:hover {
+.social-link:hover {
   border-color: var(--line-light);
   color: var(--fg);
+}
+
+.telegram-link {
+  color: var(--cyan);
 }
 
 .hero {

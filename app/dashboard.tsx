@@ -297,7 +297,19 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
             </button>
           </div>
           <a
-            className="gh-link"
+            className="social-link telegram-link"
+            href="https://t.me/fmradar"
+            target="_blank"
+            rel="noreferrer"
+            aria-label={t('social.telegram')}
+            title={t('social.telegram')}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M21.8 4.6 18.5 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L5.9 13.5 1 12c-1.1-.3-1.1-1.1.2-1.6L20.3 3c.9-.3 1.7.2 1.5 1.6z" />
+            </svg>
+          </a>
+          <a
+            className="social-link"
             href="https://github.com/a1667834841/free-model-radar"
             target="_blank"
             rel="noreferrer"
