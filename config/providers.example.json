@@ -208,6 +208,16 @@
       "modelStrategy": "free-first",
       "freeKeywords": ["free", "qwen3.8-27b", "deepseek-v4-flash", "gpt-5.6-luna", "gpt-6-astra"],
       "probe": { "maxModels": 20, "concurrency": 3, "attempts": 1, "timeoutMs": 25000 }
+    },
+    {
+      "id": "orcarouter",
+      "name": "OrcaRouter",
+      "baseUrl": "https://api.orcarouter.ai/v1",
+      "secretName": "ORCAROUTER_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": ["free"],
+      "probe": { "maxModels": 20, "concurrency": 3, "attempts": 1, "timeoutMs": 25000 }
     }
   ]
 }

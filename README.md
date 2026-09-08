@@ -30,6 +30,7 @@ A model availability and latency radar running on Cloudflare Workers.
 | **OpenCode ZEN** | No check-in. Free models are time-limited; sign-in and billing details are required, while other models are pay-per-request. [ZEN docs](https://dev.opencode.ai/docs/zen/) | [Website](https://opencode.ai) |
 | **Token Harbor** | No check-in. Free usage is a value-based allowance in a rolling 7-day period; there is no welcome credit and no card is required. [FAQ](https://tokenharbor.ai/faq) | [Website](https://tokenharbor.ai) |
 | **Experiential Labs** | OpenAI-compatible gateway with 696 discovered models and 14 `-free` model IDs. Promotional FREE models from the platform were also verified with real chat calls: `qwen3.8-27b`, `deepseek-v4-flash`, `gpt-5.6-luna`, and `gpt-6-astra` returned `usage.cost: 0.0`; `claude-fable-5.1` responded but reported non-zero cost, so it is not selected as free. | [Platform](https://platform.experientiallabs.ai/) |
+| **OrcaRouter** | OpenAI-compatible router with 194 models; 4 free model IDs (`orcarouter/free`, `deepseek/deepseek-v4-flash-free`, `tencent/hy3-free`, `z-ai/glm-5.3-flash-free`) verified via real chat calls returning 200. | [Website](https://www.orcarouter.ai/) |
 
 > Free models, quotas, and account requirements may change at any time.
 

@@ -25,6 +25,7 @@ const PROVIDER_ICON_DOMAINS: Record<string, string> = {
   flatkey: 'router.flatkey.ai',
   'cloudflare-workers-ai': 'cloudflare.com',
   'experiential-labs': 'platform.experientiallabs.ai',
+  orcarouter: 'www.orcarouter.ai',
 }
 
 export const AIHUBMIX_REGISTER_URL = 'https://aihubmix.com/?aff=FqPM'
@@ -56,6 +57,7 @@ const PROVIDER_HOME_URLS: Record<string, string> = {
   flatkey: 'https://console.flatkey.ai/sign-up?aff=EZkj',
   'cloudflare-workers-ai': 'https://dash.cloudflare.com',
   'experiential-labs': 'https://platform.experientiallabs.ai/',
+  orcarouter: 'https://www.orcarouter.ai/',
 }
 
 export function normalizeProviderKey(value: string): string {
