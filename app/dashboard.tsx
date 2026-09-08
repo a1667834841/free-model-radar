@@ -62,6 +62,7 @@ const PROVIDER_FACTS: Record<string, ProviderFact> = {
   'experiential-labs': { freeTier: 'overview.tier.experiential-labs', modelsLabel: '未公开固定数量', signup: 'overview.signup.email' },
   orcarouter: { freeTier: 'overview.tier.orcarouter', modelsLabel: '4 detected', signup: 'overview.signup.email' },
   minimax: { freeTier: 'overview.tier.minimax', modelsLabel: '8 models', signup: 'overview.signup.email', featured: true },
+  'kira-ai': { freeTier: 'overview.tier.kira-ai', modelsLabel: '7 detected', signup: 'overview.signup.gmail', featured: true },
 }
 
 function getProviderFact(provider: ProviderResult, t: ReturnType<typeof useI18n>['t']) {
@@ -307,6 +308,18 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M21.8 4.6 18.5 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L5.9 13.5 1 12c-1.1-.3-1.1-1.1.2-1.6L20.3 3c.9-.3 1.7.2 1.5 1.6z" />
+            </svg>
+          </a>
+          <a
+            className="social-link discord-link"
+            href="https://discord.gg/sc3XXRNcd"
+            target="_blank"
+            rel="noreferrer"
+            aria-label={t('social.discord')}
+            title={t('social.discord')}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4c1.8.5 2.7 1.2 2.7 1.2a12.4 12.4 0 0 0-8.5-.3c-.5.1-.8.3-1 .3 0 0 .9-.7 2.8-1.2L11 3a19.8 19.8 0 0 0-4.9 1.4C3 9 2.2 13.5 2.6 18a20 20 0 0 0 6 3c.5-.7.9-1.4 1.2-2.1-.7-.3-1.4-.6-2-1.1l.5-.4c3.9 1.8 8.1 1.8 11.9 0l.5.4c-.6.5-1.3.8-2 1.1.3.7.7 1.4 1.2 2.1a20 20 0 0 0 6-3c.5-5.1-.8-9.5-3.6-13.6ZM9.2 15.2c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4s2.1 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm7.5 0c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4s2.1 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z" />
             </svg>
           </a>
           <a

@@ -228,6 +228,16 @@
       "modelStrategy": "free-first",
       "freeKeywords": ["free"],
       "probe": { "maxModels": 8, "concurrency": 3, "attempts": 1, "timeoutMs": 25000 }
+    },
+    {
+      "id": "kira-ai",
+      "name": "Kira AI",
+      "baseUrl": "https://kiraai.vn/api/v1",
+      "secretName": "KIRA_AI_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": ["free"],
+      "probe": { "maxModels": 7, "concurrency": 3, "attempts": 1, "timeoutMs": 25000 }
     }
   ]
 }

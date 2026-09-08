@@ -55,7 +55,40 @@ function matchesSearch(model: { id: string; providerName: string }, query: strin
   return tokens.every((token) => haystack.includes(token))
 }
 
+function getSortValue(model: RankedModel, key: SortKey): number | null {
+  if (key === 'latency' || key === 'e2e') return model.latencyMs
+  if (key === 'ttft') return model.ttftMs ?? model.latencyMs
+  if (key === 'tps') return model.tokensPerSec
+  return model.score
+}
+
+function compareModelsBySort(a: RankedModel, b: RankedModel, sort: SortState): number {
+  if (!sort) return a.rank - b.rank
+  const av = getSortValue(a, sort.key)
+  const bv = getSortValue(b, sort.key)
+  if (av == null && bv == null) return a.rank - b.rank
+  if (av == null) return 1
+  if (bv == null) return -1
+  const diff = sort.direction === 'asc' ? av - bv : bv - av
+  return diff || a.rank - b.rank
+}
+
 type ModelTableRow = RankedModel
+
+type SortKey = 'latency' | 'ttft' | 'tps' | 'e2e' | 'score'
+type SortDirection = 'asc' | 'desc'
+type SortState = {
+  key: SortKey
+  direction: SortDirection
+} | null
+
+const SORT_LABEL_KEYS: Record<SortKey, 'table.col.latency' | 'table.col.ttft' | 'table.col.tps' | 'table.col.e2e' | 'table.col.score'> = {
+  latency: 'table.col.latency',
+  ttft: 'table.col.ttft',
+  tps: 'table.col.tps',
+  e2e: 'table.col.e2e',
+  score: 'table.col.score',
+}
 
 const modelTableFeatures = tableFeatures({})
 const columnHelper = createColumnHelper<typeof modelTableFeatures, ModelTableRow>()
@@ -159,6 +192,7 @@ export default function ModelEvaluation({
 
   // ── 模型行展开状态：受控 details.open，首行默认展开（P2-7）
   const [rowOpenMap, setRowOpenMap] = useState<Record<string, boolean>>({})
+  const [sortState, setSortState] = useState<SortState>(null)
 
   const { scoreMin, scoreMax } = useMemo(() => {
     const scores = rankedModels.map((m) => m.score).filter((s): s is number => s != null)
@@ -187,9 +221,13 @@ export default function ModelEvaluation({
     return grouped
   }, [rankedModels, providers, view])
 
-  const visibleModelRows = useMemo(() => {
+  const filteredModelRows = useMemo(() => {
     return modelRows.filter((model) => matchesSearch(model, searchQuery))
   }, [modelRows, searchQuery])
+
+  const visibleModelRows = useMemo(() => {
+    return [...filteredModelRows].sort((a, b) => compareModelsBySort(a, b, sortState))
+  }, [filteredModelRows, sortState])
 
   const searchSuggestions = useMemo(
     () => rankedModels.filter((model) => matchesSearch(model, searchQuery)).slice(0, 8),
@@ -208,6 +246,30 @@ export default function ModelEvaluation({
     document.addEventListener('pointerdown', handlePointerDown)
     return () => document.removeEventListener('pointerdown', handlePointerDown)
   }, [searchOpen])
+
+  function toggleSort(key: SortKey) {
+    setSortState((current) => {
+      if (current?.key !== key) return { key, direction: key === 'tps' || key === 'score' ? 'desc' : 'asc' }
+      return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+    })
+  }
+
+  function renderSortHeader(key: SortKey, className = 'mh-right') {
+    const active = sortState?.key === key
+    const direction = active ? sortState.direction : null
+    return (
+      <button
+        type="button"
+        className={`model-sort-head ${className}${active ? ' active' : ''}`}
+        onClick={() => toggleSort(key)}
+        aria-sort={direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'}
+        title={t('table.sort.hint', { column: t(SORT_LABEL_KEYS[key]) })}
+      >
+        <span>{t(SORT_LABEL_KEYS[key])}</span>
+        <span className="sort-indicator" aria-hidden="true">{direction === 'asc' ? '↑' : direction === 'desc' ? '↓' : '↕'}</span>
+      </button>
+    )
+  }
 
   const firstRowId = visibleModelRows[0] ? `${visibleModelRows[0].providerId}:${visibleModelRows[0].id}` : null
   useEffect(() => {
@@ -719,11 +781,11 @@ export default function ModelEvaluation({
             <span>{t('table.col.rank')}</span>
             <span>{t('table.col.model')}</span>
             <span className="hide-sm">{t('table.col.provider')}</span>
-            <span className="hide-sm">{t('table.col.latency')}</span>
-            <span className="mh-right">{t('table.col.ttft')}</span>
-            <span className="mh-right">{t('table.col.tps')}</span>
-            <span className="mh-right hide-sm">{t('table.col.e2e')}</span>
-            <span className="mh-right hide-sm">{t('table.col.score')}</span>
+            {renderSortHeader('latency', 'hide-sm')}
+            {renderSortHeader('ttft')}
+            {renderSortHeader('tps')}
+            {renderSortHeader('e2e', 'mh-right hide-sm')}
+            {renderSortHeader('score', 'mh-right hide-sm')}
             <span className="mh-center">{t('table.col.status')}</span>
             <span />
           </div>

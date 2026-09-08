@@ -11,3 +11,4 @@ AMD_API_KEY=replace-with-your-amd-key
 FLATKEY_API_KEY=replace-with-your-flatkey-key
 CLOUDFLARE_WORKERS_AI_API_TOKEN=replace-with-your-cloudflare-workers-ai-token
 MINIMAX_API_KEY=replace-with-your-minimax-key
+KIRA_AI_API_KEY=replace-with-your-kira-ai-key

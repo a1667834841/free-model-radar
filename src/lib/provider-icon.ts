@@ -27,6 +27,7 @@ const PROVIDER_ICON_DOMAINS: Record<string, string> = {
   'experiential-labs': 'platform.experientiallabs.ai',
   orcarouter: 'www.orcarouter.ai',
   minimax: 'www.minimax.io/favicon.ico',
+  'kira-ai': 'kiraai.vn/images/logo.png',
 }
 
 export const AIHUBMIX_REGISTER_URL = 'https://aihubmix.com/?aff=FqPM'
@@ -60,6 +61,7 @@ const PROVIDER_HOME_URLS: Record<string, string> = {
   'experiential-labs': 'https://platform.experientiallabs.ai/',
   orcarouter: 'https://www.orcarouter.ai/',
   minimax: 'https://www.minimax.io/',
+  'kira-ai': 'https://kiraai.vn/?ref=ggball0227',
 }
 
 export function normalizeProviderKey(value: string): string {

@@ -29,6 +29,7 @@
 | **OpenCode ZEN** | 无需签到；免费模型属于限时开放，需登录并补充计费信息，其他模型按请求计费。[ZEN 文档](https://dev.opencode.ai/docs/zen/) | [官网](https://opencode.ai) |
 | **Token Harbor** | 无需签到；免费额度按滚动 7 天周期、按价值计量；无注册赠金，无需信用卡。[FAQ](https://tokenharbor.ai/faq) | [官网](https://tokenharbor.ai) |
 | **MiniMax** | 官方 OpenAI-compatible API 返回 8 个模型，`/models` 未提供结构化免费信号；因模型数 ≤20，使用回退全量探测。`MiniMax-M3` 已通过真实流式 chat 调用验证，返回 HTTP 200 且包含 `pong`。 | [官网](https://www.minimax.io/) |
+| **Kira AI** | OpenAI-compatible API，端点为 `/api/v1`；`/models` 返回 61 个模型，其中 7 个带 `is_free` 标记（如 `mimo-v2.5-free`、`hy3-free`、`glm-5.3-flash-free`）。官网首页显示 Free 可获得 150M tokens，免费试用套餐说明注册后提供 50,000 tokens；合作方模型可能需要充值 VND 钱包。多个免费模型已通过真实流式 chat 调用验证，返回 HTTP 200 且包含 `pong`。 | [注册](https://kiraai.vn/?ref=ggball0227) |
 
 > 免费模型、额度和账户要求可能随时变化。
 

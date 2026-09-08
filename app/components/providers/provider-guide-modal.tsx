@@ -11,6 +11,8 @@ type ProviderGuideModalProps = {
   onClose: () => void
 }
 
+const MINIMAX_DEMO_KEY = process.env.NEXT_PUBLIC_MINIMAX_DEMO_KEY ?? ''
+
 const KEY_PATHS: Record<string, string> = {
   gmicloud: 'Console → API Keys',
   justwoker: 'Account → API Key',
@@ -31,9 +33,20 @@ type ProviderGuideContent = {
   keyDetail: LocalizedCopy
   highlights: LocalizedCopy[]
   images: Array<{ src: string; caption: LocalizedCopy }>
+  sharedKey?: {
+    value: string
+    label: LocalizedCopy
+    note: LocalizedCopy
+  }
 }
 
 const copy = (zh: string, en: string): LocalizedCopy => ({ zh, en })
+
+function maskKey(value: string): string {
+  if (!value) return ''
+  if (value.length <= 18) return `${value.slice(0, 6)}••••${value.slice(-4)}`
+  return `${value.slice(0, 8)}••••••••••••••••••••${value.slice(-8)}`
+}
 
 const PROVIDER_GUIDES: Record<string, ProviderGuideContent> = {
   openrouter: {
@@ -214,6 +227,21 @@ const PROVIDER_GUIDES: Record<string, ProviderGuideContent> = {
       copy('MiniMax-M3 已通过真实流式 chat 调用验证可返回 pong。', 'MiniMax-M3 was verified with a real streaming chat call returning pong.'),
     ],
     images: [],
+    sharedKey: MINIMAX_DEMO_KEY ? {
+      value: MINIMAX_DEMO_KEY,
+      label: copy('共享 MiniMax Key', 'Shared MiniMax key'),
+      note: copy('脱敏展示，点击复制可复制完整 Key。请仅用于测试或临时体验。', 'Masked display; click copy to copy the full key. Use it only for testing or temporary trials.'),
+    } : undefined,
+  },
+  'kira-ai': {
+    registerUrl: 'https://kiraai.vn/?ref=ggball0227',
+    registerDetail: copy('通过推荐链接进入 Kira AI，使用 Gmail 或 Google 登录注册。', 'Open Kira AI with the referral link, then sign up with Gmail or Google.'),
+    keyDetail: copy('进入 API Key 区域创建 Key，Base URL 使用 Kira AI 的 /api/v1 端点。', 'Create an API key in the API Keys area and use the Kira AI /api/v1 endpoint as the Base URL.'),
+    highlights: [
+      copy('官网首页显示 Free 可获得 150M tokens；免费试用套餐注册后提供 50,000 tokens。', 'The homepage advertises a 150M-token free offer; the Free Trial plan provides 50,000 tokens after signup.'),
+      copy('当前 /models 返回 61 个模型，其中 7 个带 is_free 标记，并已通过真实流式 chat 调用验证。', 'The current /models response returns 61 models, including 7 with is_free, verified via real streaming chat calls.'),
+    ],
+    images: [],
   },
 }
 
@@ -305,6 +333,7 @@ export default function ProviderGuideModal({ provider, onClose }: ProviderGuideM
   const { t, locale } = useI18n()
   const closeRef = useRef<HTMLButtonElement>(null)
   const [copied, setCopied] = useState(false)
+  const [keyCopied, setKeyCopied] = useState(false)
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [imageBroken, setImageBroken] = useState(false)
 
@@ -343,6 +372,7 @@ export default function ProviderGuideModal({ provider, onClose }: ProviderGuideM
 
   useEffect(() => {
     setCopied(false)
+    setKeyCopied(false)
     setActiveImageIndex(0)
     setImageBroken(false)
   }, [provider])
@@ -357,6 +387,14 @@ export default function ProviderGuideModal({ provider, onClose }: ProviderGuideM
     if (await copyText(endpoint)) {
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1600)
+    }
+  }
+
+  async function handleCopyKey() {
+    if (!guide?.sharedKey?.value) return
+    if (await copyText(guide.sharedKey.value)) {
+      setKeyCopied(true)
+      window.setTimeout(() => setKeyCopied(false), 1600)
     }
   }
 
@@ -463,6 +501,21 @@ export default function ProviderGuideModal({ provider, onClose }: ProviderGuideM
                 </button>
               </div>
             </div>
+
+            {guide?.sharedKey ? (
+              <div className="guide-modal-endpoint guide-modal-shared-key">
+                <div className="guide-modal-endpoint-label">
+                  <span>{localized(guide.sharedKey.label, locale)}</span>
+                </div>
+                <div className="guide-modal-endpoint-row">
+                  <code title={maskKey(guide.sharedKey.value)}>{maskKey(guide.sharedKey.value)}</code>
+                  <button type="button" className={`guide-modal-copy${keyCopied ? ' copied' : ''}`} onClick={handleCopyKey} aria-live="polite">
+                    <CopyIcon />{keyCopied ? t('guide.copied') : t('guide.copyKey')}
+                  </button>
+                </div>
+                <p className="guide-modal-shared-key-note">{localized(guide.sharedKey.note, locale)}</p>
+              </div>
+            ) : null}
 
             <p className="guide-modal-note"><span aria-hidden="true">i</span>{t('guide.modalNote')}</p>
           </div>

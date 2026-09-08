@@ -1920,6 +1920,10 @@ svg {
   color: var(--cyan);
 }
 
+.discord-link {
+  color: #8EA1E1;
+}
+
 .hero {
   min-height: auto;
   padding: 26px 0 22px;
@@ -2801,6 +2805,17 @@ svg {
   opacity: .42;
 }
 
+.guide-modal-shared-key {
+  border-color: color-mix(in oklch, var(--accent) 28%, var(--border));
+}
+
+.guide-modal-shared-key-note {
+  margin: 8px 0 0;
+  color: var(--ink-faint);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .guide-modal-note {
   display: flex;
   align-items: flex-start;
@@ -3207,7 +3222,8 @@ svg {
   backdrop-filter: blur(4px);
 }
 
-.model-head span {
+.model-head span,
+.model-sort-head {
   display: flex;
   align-items: center;
   color: var(--ink-faint);
@@ -3215,6 +3231,37 @@ svg {
   font-size: 9px;
   letter-spacing: .04em;
   text-transform: uppercase;
+}
+
+.model-sort-head {
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  transition: color .16s;
+}
+
+.model-sort-head:hover,
+.model-sort-head.active {
+  color: var(--fg);
+}
+
+.model-sort-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.sort-indicator {
+  color: currentColor;
+  font-size: 10px;
+  opacity: .68;
+}
+
+.model-sort-head.active .sort-indicator {
+  opacity: 1;
 }
 
 .mh-right {

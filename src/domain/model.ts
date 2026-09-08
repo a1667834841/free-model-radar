@@ -29,7 +29,7 @@ function isZeroPrice(value: string | number | null | undefined): boolean {
 }
 
 function hasProviderSpecificFreeSignal(provider: ProviderConfig): boolean {
-  return provider.id === 'openrouter' || provider.id === 'rntm' || provider.id === 'gmicloud' || provider.id === 'zenmux' || provider.id === 'nvidia' || provider.id === 'cloudflare-workers-ai'
+  return provider.id === 'openrouter' || provider.id === 'rntm' || provider.id === 'gmicloud' || provider.id === 'zenmux' || provider.id === 'nvidia' || provider.id === 'cloudflare-workers-ai' || provider.id === 'kira-ai'
 }
 
 function getFirstPricingValue(list: Array<{ value?: unknown; unit?: unknown; currency?: unknown }> | undefined): number | null {
@@ -54,6 +54,7 @@ function isProviderSpecificFreeModel(provider: ProviderConfig, model: Discovered
     case 'rntm':
       return model.hasFreeRoute === true
     case 'gmicloud':
+    case 'kira-ai':
       return model.isFree === true
     case 'zenmux':
       return isZenmuxFreeModel(model)

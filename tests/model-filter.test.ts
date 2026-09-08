@@ -91,6 +91,21 @@ describe('model filtering', () => {
     expect(selected).toEqual([])
   })
 
+  it('selects Kira AI models with isFree flag and skips fallback for paid catalogs', () => {
+    const selected = selectModelsForProbe({ ...provider, id: 'kira-ai', probe: { ...provider.probe, maxModels: 10 } }, [
+      { id: 'kira-3.5-pro', isFree: false },
+      { id: 'mimo-v2.5-free', isFree: true },
+      { id: 'hy3-free', isFree: true },
+    ])
+
+    expect(selected.map((model) => model.id)).toEqual(['hy3-free', 'mimo-v2.5-free'])
+
+    expect(selectModelsForProbe({ ...provider, id: 'kira-ai' }, [
+      { id: 'kira-3.5-pro', isFree: false },
+      { id: 'kira-2.5-pro', isFree: false },
+    ])).toEqual([])
+  })
+
   it('selects ZenMux models with zero pricings prompt and completion', () => {
     const selected = selectModelsForProbe({ ...provider, id: 'zenmux' }, [
       { id: 'paid', pricings: { prompt: [{ value: 0.16 }], completion: [{ value: 0.47 }] } },
