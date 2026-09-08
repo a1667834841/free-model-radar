@@ -24,6 +24,7 @@ import { getProviderIconUrl } from '@/lib/provider-icon'
 import { getScoreTierVar } from '@/lib/score-tier'
 import { useI18n } from '../../i18n'
 import AgentConfigExport from '../export/agent-config-export'
+import { getModelCapability } from '../../model-capabilities'
 
 type ModelEvaluationProps = {
   models: FlattenedModel[]
@@ -58,6 +59,76 @@ type ModelTableRow = RankedModel
 
 const modelTableFeatures = tableFeatures({})
 const columnHelper = createColumnHelper<typeof modelTableFeatures, ModelTableRow>()
+
+function CapabilityIcon({ type }: { type: 'context' | 'embedding' | 'image' | 'multimodal' }) {
+  if (type === 'context') {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="3" y="4" width="10" height="8" rx="2" />
+        <path d="M5.2 6.5h5.6" />
+        <path d="M5.2 9.5h3.8" />
+      </svg>
+    )
+  }
+  if (type === 'embedding') {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="4" cy="4.5" r="1.7" />
+        <circle cx="12" cy="4.5" r="1.7" />
+        <circle cx="8" cy="11.5" r="1.7" />
+        <path d="M5.5 5.6 7 10" />
+        <path d="M10.5 5.6 9 10" />
+        <path d="M5.7 4.5h4.6" />
+      </svg>
+    )
+  }
+  if (type === 'image') {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="2.6" y="3.2" width="10.8" height="9.6" rx="2" />
+        <circle cx="10.7" cy="5.8" r="1" />
+        <path d="m3.5 11 3-3 2.1 2.1 1.1-1.1 2.8 2.8" />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="2.4" y="3.3" width="11.2" height="9.4" rx="2" />
+      <circle cx="10.7" cy="5.8" r="1" />
+      <path d="m3.6 11 2.8-2.8 2 2 1.1-1.1 2.9 2.9" />
+      <path d="M4.8 5.6h2.8" />
+    </svg>
+  )
+}
+
+function ModelCapabilityTags({ model }: { model: RankedModel }) {
+  const capability = getModelCapability(model)
+  return (
+    <span className="m-capabilities" aria-label="模型能力">
+      <span className="m-cap-tag m-cap-context" title={`上下文长度：${capability.context} tokens`}>
+        <CapabilityIcon type="context" />
+        {capability.context}
+      </span>
+      {capability.isInputMultimodal && (
+        <span className="m-cap-tag m-cap-multimodal" title="输入多模态">
+          <CapabilityIcon type="multimodal" />
+        </span>
+      )}
+      {capability.isEmbedding && (
+        <span className="m-cap-tag m-cap-embedding" title="向量模型">
+          <CapabilityIcon type="embedding" />
+          向量
+        </span>
+      )}
+      {capability.canGenerateImage && (
+        <span className="m-cap-tag m-cap-image" title="生图模型">
+          <CapabilityIcon type="image" />
+          生图
+        </span>
+      )}
+    </span>
+  )
+}
 
 export default function ModelEvaluation({
   models,
@@ -224,16 +295,20 @@ export default function ModelEvaluation({
       header: t('table.col.model'),
       cell: ({ row }) => {
         const model = row.original
-        const isBestTtft = modelBest.bestTtft?.providerId === model.providerId && modelBest.bestTtft?.id === model.id
-        const isBestTps = modelBest.bestTps?.providerId === model.providerId && modelBest.bestTps?.id === model.id
-        const isBestE2e = modelBest.bestE2e?.providerId === model.providerId && modelBest.bestE2e?.id === model.id
-        const showBadges = rankedModels.length > 1
+        const isBestTtft = rankedModels.length > 1 && modelBest.bestTtft?.providerId === model.providerId && modelBest.bestTtft?.id === model.id
+        const isBestTps = rankedModels.length > 1 && modelBest.bestTps?.providerId === model.providerId && modelBest.bestTps?.id === model.id
+        const isBestE2e = rankedModels.length > 1 && modelBest.bestE2e?.providerId === model.providerId && modelBest.bestE2e?.id === model.id
+        const highlightClass = [
+          isBestTtft ? 'best-ttft' : '',
+          isBestTps ? 'best-tps' : '',
+          isBestE2e ? 'best-e2e' : '',
+        ].filter(Boolean).join(' ')
         return (
-          <span className="m-name">
-            {model.id}
-            {showBadges && isBestTtft && <span className="m-badge m-badge-ttft">{t('badge.bestTtft')}</span>}
-            {showBadges && isBestTps && <span className="m-badge m-badge-tps">{t('badge.bestTps')}</span>}
-            {showBadges && isBestE2e && <span className="m-badge m-badge-e2e">{t('badge.bestE2e')}</span>}
+          <span className="m-name-wrap">
+            <span className={`m-name${highlightClass ? ` ${highlightClass}` : ''}`}>
+              {model.id}
+            </span>
+            <ModelCapabilityTags model={model} />
           </span>
         )
       },
@@ -600,6 +675,12 @@ export default function ModelEvaluation({
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="rank-note" aria-label={t('rank.note.aria')}>
+        <span><i className="rank-note-dot ttft" />{t('rank.note.ttft')}</span>
+        <span><i className="rank-note-dot tps" />{t('rank.note.tps')}</span>
+        <span><i className="rank-note-dot e2e" />{t('rank.note.e2e')}</span>
       </div>
 
       <div

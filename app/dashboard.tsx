@@ -2,10 +2,9 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import type { CSSProperties } from 'react'
-import { useI18n } from './i18n'
+import { useI18n, type MessageKey } from './i18n'
 import { useCountUp } from '@/lib/use-count-up'
 import { getProviderIconUrl } from '@/lib/provider-icon'
-import { getTtftColor, getTtftTierClass } from '@/lib/ttft-tier'
 import RefreshButton from './refresh-button'
 import ModelEvaluation from './components/evaluation/model-evaluation'
 import TrendAnalysis from './components/trends/trend-analysis'
@@ -34,6 +33,51 @@ type DashboardProps = {
 }
 
 const PROVIDER_COLORS = ['#F0A35E', '#5FB8CE', '#A78BFA', '#E879A8', '#7FBF6A', '#D8C07A', '#62B8A0', '#E59A8C']
+
+type ProviderFact = {
+  freeTier: MessageKey
+  modelsLabel: string
+  signup: MessageKey
+  featured?: boolean
+}
+
+const PROVIDER_FACTS: Record<string, ProviderFact> = {
+  openrouter: { freeTier: 'overview.tier.openrouter', modelsLabel: '18 models', signup: 'overview.signup.emailSocial', featured: true },
+  bynara: { freeTier: 'overview.tier.bynara', modelsLabel: '未公开固定数量', signup: 'overview.signup.email' },
+  sensenova: { freeTier: 'overview.tier.sensenova', modelsLabel: '未公开固定数量', signup: 'overview.signup.cnPhone' },
+  'b-ai': { freeTier: 'overview.tier.b-ai', modelsLabel: '未公开固定数量', signup: 'overview.signup.google' },
+  rntm: { freeTier: 'overview.tier.rntm', modelsLabel: '340+ routed models', signup: 'overview.signup.emailGoogle' },
+  aihubmix: { freeTier: 'overview.tier.aihubmix', modelsLabel: '5 detected', signup: 'overview.signup.emailTopup' },
+  opencode: { freeTier: 'overview.tier.opencode', modelsLabel: '7 reported / 1 detected', signup: 'overview.signup.github' },
+  gmicloud: { freeTier: 'overview.tier.gmicloud', modelsLabel: 'promo models', signup: 'overview.signup.email' },
+  justwoker: { freeTier: 'overview.tier.justwoker', modelsLabel: '4 detected', signup: 'overview.signup.github' },
+  zenmux: { freeTier: 'overview.tier.zenmux', modelsLabel: '未公开固定数量', signup: 'overview.signup.email' },
+  nvidia: { freeTier: 'overview.tier.nvidia', modelsLabel: '82 models', signup: 'overview.signup.phone', featured: true },
+  gorouter: { freeTier: 'overview.tier.gorouter', modelsLabel: '未公开固定数量', signup: 'overview.signup.github' },
+  tokenharbor: { freeTier: 'overview.tier.tokenharbor', modelsLabel: '未公开固定数量', signup: 'overview.signup.email' },
+  groq: { freeTier: 'overview.tier.groq', modelsLabel: '7 models', signup: 'overview.signup.email', featured: true },
+  amd: { freeTier: 'overview.tier.amd', modelsLabel: '5 models', signup: 'overview.signup.email', featured: true },
+  flatkey: { freeTier: 'overview.tier.flatkey', modelsLabel: '未公开固定数量', signup: 'overview.signup.email' },
+  'cloudflare-workers-ai': { freeTier: 'overview.tier.cloudflare-workers-ai', modelsLabel: '40 models', signup: 'overview.signup.email', featured: true },
+  'experiential-labs': { freeTier: 'overview.tier.experiential-labs', modelsLabel: '未公开固定数量', signup: 'overview.signup.email' },
+}
+
+function getProviderFact(provider: ProviderResult, t: ReturnType<typeof useI18n>['t']) {
+  const detectedCount = provider.models.length
+  const fact: ProviderFact = PROVIDER_FACTS[provider.id] ?? {
+    freeTier: 'overview.tier.unknown',
+    modelsLabel: detectedCount > 0 ? `${detectedCount} detected` : '未公开固定数量',
+    signup: 'overview.signup.email',
+  }
+  const useDetected = !fact.featured && detectedCount > 0 && /detected|未公开|promo/.test(fact.modelsLabel)
+  const count = fact.modelsLabel.match(/^(\d+\+?) (?:routed )?models$/)?.[1]
+  const modelsLabel = useDetected
+    ? t('overview.models.detected', { count: detectedCount })
+    : count
+      ? t(fact.modelsLabel.includes('routed') ? 'overview.models.routed' : 'overview.models.count', { count })
+      : t('overview.models.unknown')
+  return { ...fact, freeTier: t(fact.freeTier), signup: t(fact.signup), modelsLabel }
+}
 
 /** 数字滚动展示（设计稿 .kpi-big[data-count] 行为）。 */
 function CountUpNumber({ value, pad = 0 }: { value: number; pad?: number }) {
@@ -167,7 +211,6 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
   const { globalMaxTtft, providerOverview, providerColors } = useMemo(() => {
     const ttftValues = models.map((m) => resolveStreamingMetrics(m).ttftMs)
     const gMax = ttftValues.length ? Math.max(...ttftValues) : 0
-
     const colors: Record<string, string> = {}
     providers.forEach((p, idx) => {
       colors[p.id] = PROVIDER_COLORS[idx % PROVIDER_COLORS.length]
@@ -176,14 +219,15 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
     const overview = providers
       .map((p) => {
         const ttfts = p.models.map((m) => resolveStreamingMetrics({ ...m, providerId: p.id, providerName: p.name }).ttftMs).sort((a, b) => a - b)
+        const fact = getProviderFact(p, t)
         if (ttfts.length === 0) {
-          return { ...p, modelCount: 0, min: 0, max: 0, median: 0, ttfts: [] as number[] }
+          return { ...p, ...fact, modelCount: 0, min: 0, max: 0, median: 0, ttfts: [] as number[] }
         }
         const mid = Math.floor(ttfts.length / 2)
         const median = ttfts.length % 2 === 0
           ? Math.round((ttfts[mid - 1] + ttfts[mid]) / 2)
           : ttfts[mid]
-        return { ...p, modelCount: p.models.length, min: ttfts[0], max: ttfts[ttfts.length - 1], median, ttfts }
+        return { ...p, ...fact, modelCount: p.models.length, min: ttfts[0], max: ttfts[ttfts.length - 1], median, ttfts }
       })
       .sort((a, b) => {
         if (a.modelCount === 0 && b.modelCount === 0) return a.name.localeCompare(b.name)
@@ -194,10 +238,8 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
       })
 
     return { globalMaxTtft: gMax, providerOverview: overview, providerColors: colors }
-  }, [providers, models])
+  }, [providers, models, t])
 
-  // prov-scale 以 0 为基准归一化（设计稿 L488：左端固定 0 ms）
-  const ttftScaleMax = Math.max(globalMaxTtft, 1)
   const fastestMeterPct = fastestTtftModel && globalMaxTtft > 0
     ? Math.max(8, Math.min(100, (fastestTtftModel.ttftMs / globalMaxTtft) * 100))
     : 0
@@ -347,15 +389,19 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
               <i className="help-dot" data-tip={t('overview.sub')}>?</i>
             </div>
           </div>
-          <div className="overview-list">
+          <div className="overview-table" role="table" aria-label={t('overview.title')}>
+            <div className="overview-table-head" role="row">
+              <span role="columnheader">{t('table.col.provider')}</span>
+              <span role="columnheader">{t('overview.col.freeTier')}</span>
+              <span role="columnheader">{t('overview.col.models')}</span>
+              <span role="columnheader">{t('overview.col.signup')}</span>
+              <span role="columnheader">{t('guide.title')}</span>
+            </div>
             {providerOverview.map((p, idx) => {
               const color = providerColors[p.id]
               const faviconUrl = getProviderIconUrl(p)
-              const leftPct = p.modelCount > 0 ? (p.min / ttftScaleMax) * 100 : 0
-              const widthPct = p.modelCount > 0 ? ((p.max - p.min) / ttftScaleMax) * 100 : 0
-              const midPct = p.modelCount > 0 ? (p.median / ttftScaleMax) * 100 : 0
               return (
-                <div className="prov-row" key={p.id} style={{ '--delay': `${Math.min(idx * 40, 320)}ms` } as CSSProperties}>
+                <div className="prov-row" key={p.id} role="row" style={{ '--delay': `${Math.min(idx * 40, 320)}ms` } as CSSProperties}>
                   <div className="prov-id">
                     <span className="prov-fav" style={{ '--prov': color } as CSSProperties}>
                       {faviconUrl ? (
@@ -369,7 +415,11 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
                       ) : null}
                     </span>
                     <span className="prov-name">{p.name || p.id}</span>
-                    <span className={`prov-status ${p.status}`}>{t(`status.${p.status}` as any)}</span>
+                  </div>
+                  <div className="prov-free-tier">{p.freeTier}</div>
+                  <div className="prov-models">{p.modelsLabel}</div>
+                  <div className="prov-signup">{p.signup}</div>
+                  <div className="prov-action">
                     <button
                       type="button"
                       className="prov-guide-trigger"
@@ -380,50 +430,9 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
                       {t('guide.button')} <span aria-hidden="true">↗</span>
                     </button>
                   </div>
-                  <div className="prov-bar">
-                    <div className="prov-track">
-                      {p.modelCount > 0 ? (
-                        <>
-                          <span
-                            className="prov-range"
-                            style={{
-                              '--lo': `${leftPct}%`,
-                              '--wid': `${Math.max(widthPct, 2)}%`,
-                              background: widthPct > 8
-                                ? `linear-gradient(90deg, ${getTtftColor(p.min)}, ${getTtftColor(p.max)})`
-                                : getTtftColor(p.min),
-                            } as CSSProperties}
-                          />
-                          <span className="prov-mid" style={{ '--mid': `${midPct}%` } as CSSProperties} />
-                        </>
-                      ) : (
-                        <span className="prov-empty" />
-                      )}
-                    </div>
-                    <div className="prov-scale"><span>0 ms</span><span>{globalMaxTtft.toLocaleString()} ms</span></div>
-                  </div>
-                  <div className="prov-nums">
-                    {p.modelCount > 0 ? (
-                      <>
-                        <span className={getTtftTierClass(p.min)}>{p.min.toLocaleString()}<small>ms</small></span>
-                        <span className="prov-sep">·</span>
-                        <span className={getTtftTierClass(p.median)}>{p.median.toLocaleString()}<small>ms</small></span>
-                        <span className="prov-sep">·</span>
-                        <span className={getTtftTierClass(p.max)}>{p.max.toLocaleString()}<small>ms</small></span>
-                      </>
-                    ) : (
-                      <span className="prov-na">—</span>
-                    )}
-                  </div>
                 </div>
               )
             })}
-          </div>
-          <div className="prov-legend">
-            <span><i style={{ background: 'var(--lat-fast)' }} /><b>≤ P50</b></span>
-            <span><i style={{ background: 'var(--lat-mid)' }} /><b>P50-P95</b></span>
-            <span><i style={{ background: 'var(--lat-slow)' }} /><b>&gt; P95</b></span>
-            <span><i style={{ background: 'color-mix(in oklch, var(--fg) 82%, transparent)' }} />{t('overview.median')}</span>
           </div>
         </section>
       )}

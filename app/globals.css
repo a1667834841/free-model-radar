@@ -226,9 +226,46 @@ details summary { cursor: pointer; }
   margin-bottom: 20px;
 }
 
-.overview-list {
+.overview-table {
+  overflow-x: auto;
+  border-top: 1px solid rgba(255, 255, 255, .16);
+}
+
+.overview-table-head,
+.prov-row {
   display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(260px, 1.35fr) minmax(300px, 1.45fr) minmax(130px, .55fr) minmax(170px, .7fr) minmax(150px, .65fr);
+  align-items: center;
+  min-width: 980px;
+}
+
+.overview-table-head {
+  min-height: 44px;
+  border-bottom: 1px solid rgba(255, 255, 255, .16);
+  color: var(--ink-faint);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
+.overview-table-head span,
+.prov-row > div {
+  padding-right: 20px;
+}
+
+.overview-table-head span:nth-child(3),
+.overview-table-head span:nth-child(4) {
+  text-align: right;
+}
+
+.overview-table-head span:nth-child(5) {
+  text-align: right;
+}
+
+.overview-table-head span:first-child,
+.prov-row > div:first-child {
+  padding-left: 24px;
 }
 
 .overview-dot {
@@ -2209,26 +2246,22 @@ svg {
 }
 
 .prov-row {
-  display: grid;
-  grid-template-columns: var(--prov-cols);
-  gap: 16px;
-  align-items: center;
-  min-height: 56px;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--panel);
-  transition: border-color .2s;
+  min-height: 74px;
+  border-bottom: 1px solid rgba(255, 255, 255, .11);
+  background: transparent;
+  animation: row-in .36s both;
+  animation-delay: var(--delay);
+  transition: background .16s;
 }
 
 .prov-row:hover {
-  border-color: var(--line-light);
+  background: rgba(255, 255, 255, .035);
 }
 
 .prov-id {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 14px;
   min-width: 0;
 }
 
@@ -2238,16 +2271,16 @@ svg {
 
 .prov-fav,
 .mini-fav {
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   border: 1px solid color-mix(in oklch, var(--prov, var(--fg)) 24%, transparent);
-  border-radius: 5px;
-  background: color-mix(in oklch, var(--prov, var(--fg)) 16%, transparent);
+  border-radius: 9px;
+  background: color-mix(in oklch, var(--prov, var(--fg)) 15%, #fff);
 }
 
 .mini-fav {
@@ -2268,28 +2301,37 @@ svg {
   overflow: hidden;
   color: var(--fg);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color .18s;
 }
 
-.prov-name:hover {
-  color: var(--accent);
+.prov-free-tier,
+.prov-models,
+.prov-signup {
+  overflow-wrap: anywhere;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+  line-height: 1.5;
 }
 
-.prov-name:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-  border-radius: 3px;
+.prov-models,
+.prov-signup {
+  color: color-mix(in oklch, var(--fg) 70%, transparent);
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
-.prov-status {
-  color: var(--lat-fast);
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: .04em;
+.prov-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
 }
 
 .prov-status.empty {
@@ -2305,13 +2347,13 @@ svg {
   align-items: center;
   gap: 3px;
   flex: 0 0 auto;
-  margin-left: 2px;
-  padding: 3px 6px;
+  margin-left: 0;
+  padding: 7px 10px;
   border: 1px solid color-mix(in oklch, var(--accent) 32%, transparent);
   border-radius: 5px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
@@ -3014,6 +3056,35 @@ svg {
   box-shadow: none;
 }
 
+.rank-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 10px 2px 12px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.rank-note span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.rank-note-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.rank-note-dot.ttft { color: var(--lat-fast); }
+.rank-note-dot.tps { color: var(--cyan); }
+.rank-note-dot.e2e { color: var(--purple); }
+
 .json-viewer {
   display: none;
   margin-top: 12px;
@@ -3176,8 +3247,8 @@ svg {
 }
 
 .model-row {
-  min-height: 52px;
-  padding: 0 16px;
+  min-height: 66px;
+  padding: 8px 16px;
   cursor: pointer;
   transition: background .18s;
 }
@@ -3194,6 +3265,63 @@ svg {
   text-align: right;
 }
 
+.m-name-wrap {
+  display: flex;
+  min-width: 0;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.m-name-wrap > .m-name {
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
+.m-capabilities {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  gap: 5px;
+}
+
+.m-cap-tag {
+  --cap-color: var(--ink-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in oklch, var(--cap-color) 34%, transparent);
+  border-radius: 5px;
+  background: color-mix(in oklch, var(--cap-color) 12%, transparent);
+  color: var(--cap-color);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.m-cap-tag svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.m-cap-context { --cap-color: var(--cyan); }
+.m-cap-multimodal { --cap-color: var(--purple); }
+.m-cap-embedding { --cap-color: var(--lat-fast); }
+.m-cap-image { --cap-color: var(--lat-mid); }
+
 .m-name {
   display: flex;
   align-items: center;
@@ -3208,31 +3336,22 @@ svg {
   white-space: nowrap;
 }
 
-.m-badge {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 4px;
-  background: var(--green-soft);
+.m-name.best-ttft {
   color: var(--lat-fast);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .06em;
-  padding: 2px 7px;
 }
 
-/* 三个性能指标的“最优”徽章：TTFT 绿（首字快）、TPS 蓝（吞吐高）、E2E 紫红（端到端快） */
-.m-badge-ttft {
-  background: color-mix(in oklch, var(--lat-fast) 18%, transparent);
-  color: var(--lat-fast);
-}
-.m-badge-tps {
-  background: color-mix(in oklch, var(--cyan) 24%, transparent);
+.m-name.best-tps {
   color: var(--cyan);
 }
-.m-badge-e2e {
-  background: color-mix(in oklch, var(--purple) 26%, transparent);
+
+.m-name.best-e2e {
   color: var(--purple);
+}
+
+.m-name.best-ttft.best-tps,
+.m-name.best-ttft.best-e2e,
+.m-name.best-tps.best-e2e {
+  font-weight: 800;
 }
 
 .m-prov {
