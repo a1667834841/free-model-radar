@@ -26,6 +26,7 @@ const PROVIDER_ICON_DOMAINS: Record<string, string> = {
   'cloudflare-workers-ai': 'cloudflare.com',
   'experiential-labs': 'platform.experientiallabs.ai',
   orcarouter: 'www.orcarouter.ai',
+  minimax: 'www.minimax.io/favicon.ico',
 }
 
 export const AIHUBMIX_REGISTER_URL = 'https://aihubmix.com/?aff=FqPM'
@@ -58,6 +59,7 @@ const PROVIDER_HOME_URLS: Record<string, string> = {
   'cloudflare-workers-ai': 'https://dash.cloudflare.com',
   'experiential-labs': 'https://platform.experientiallabs.ai/',
   orcarouter: 'https://www.orcarouter.ai/',
+  minimax: 'https://www.minimax.io/',
 }
 
 export function normalizeProviderKey(value: string): string {

@@ -218,6 +218,16 @@
       "modelStrategy": "free-first",
       "freeKeywords": ["free"],
       "probe": { "maxModels": 20, "concurrency": 3, "attempts": 1, "timeoutMs": 25000 }
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "baseUrl": "https://api.minimax.io/v1",
+      "secretName": "MINIMAX_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": ["free"],
+      "probe": { "maxModels": 8, "concurrency": 3, "attempts": 1, "timeoutMs": 25000 }
     }
   ]
 }

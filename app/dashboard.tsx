@@ -61,6 +61,7 @@ const PROVIDER_FACTS: Record<string, ProviderFact> = {
   'cloudflare-workers-ai': { freeTier: 'overview.tier.cloudflare-workers-ai', modelsLabel: '40 models', signup: 'overview.signup.email', featured: true },
   'experiential-labs': { freeTier: 'overview.tier.experiential-labs', modelsLabel: '未公开固定数量', signup: 'overview.signup.email' },
   orcarouter: { freeTier: 'overview.tier.orcarouter', modelsLabel: '4 detected', signup: 'overview.signup.email' },
+  minimax: { freeTier: 'overview.tier.minimax', modelsLabel: '8 models', signup: 'overview.signup.email', featured: true },
 }
 
 function getProviderFact(provider: ProviderResult, t: ReturnType<typeof useI18n>['t']) {

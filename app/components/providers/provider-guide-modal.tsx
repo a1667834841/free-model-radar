@@ -206,6 +206,15 @@ const PROVIDER_GUIDES: Record<string, ProviderGuideContent> = {
       { src: '/provider-guides/flatkey-3.jpg', caption: copy('Flatkey 模型与 Key 管理', 'Flatkey model and key management') },
     ],
   },
+  minimax: {
+    registerDetail: copy('访问 MiniMax 官网注册账号并进入开放平台。', 'Register on the MiniMax website and open the developer platform.'),
+    keyDetail: copy('创建 API Key 后，Base URL 使用官方 /v1 端点。', 'Create an API key and use the official /v1 endpoint as the Base URL.'),
+    highlights: [
+      copy('当前 /models 返回 8 个 MiniMax 模型，模型列表较小，使用回退全量探测。', 'The current /models response returns 8 MiniMax models, so fallback probing covers the full small catalog.'),
+      copy('MiniMax-M3 已通过真实流式 chat 调用验证可返回 pong。', 'MiniMax-M3 was verified with a real streaming chat call returning pong.'),
+    ],
+    images: [],
+  },
 }
 
 function localized(value: LocalizedCopy, locale: Locale): string {
