@@ -416,7 +416,7 @@ export default function ProviderGuideModal({ provider, onClose }: ProviderGuideM
             <div className="guide-modal-address">
               <div>
                 <span className="guide-modal-label">{t('guide.registerAddress')}</span>
-                {homeUrl ? <a href={homeUrl} target="_blank" rel="noreferrer" title={homeUrl}>{homeUrl}</a> : <span className="guide-modal-muted">{t('guide.linkUnavailable')}</span>}
+                {homeUrl ? <code className="guide-modal-url" title={homeUrl}>{homeUrl}</code> : <span className="guide-modal-muted">{t('guide.linkUnavailable')}</span>}
               </div>
               {homeUrl ? <a className="guide-modal-open" href={homeUrl} target="_blank" rel="noreferrer">{t('guide.openRegister')} <span aria-hidden="true">↗</span></a> : null}
             </div>

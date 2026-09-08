@@ -2636,17 +2636,16 @@ svg {
   text-transform: uppercase;
 }
 
-.guide-modal-address a:not(.guide-modal-open) {
+.guide-modal-url {
+  display: block;
+  min-width: 0;
   overflow: hidden;
   color: var(--fg);
   font-family: var(--font-mono);
   font-size: 11px;
+  line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.guide-modal-address a:not(.guide-modal-open):hover {
-  color: var(--accent);
 }
 
 .guide-modal-open {
