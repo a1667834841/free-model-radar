@@ -1,4 +1,5 @@
 import type { ProviderConfig } from './provider'
+import { classifyModelCost, isFreeCost } from './model-cost'
 
 export type ModelPricing = {
   prompt?: string | number | null
@@ -24,7 +25,7 @@ export function isFreeModel(modelId: string, freeKeywords: string[]): boolean {
 
 function isZeroPrice(value: string | number | null | undefined): boolean {
   if (typeof value === 'number') return value === 0
-  if (typeof value === 'string') return Number(value) === 0
+  if (typeof value === 'string') return value.trim() !== '' && Number(value) === 0
   return false
 }
 
@@ -71,8 +72,16 @@ function isCandidateFreeModel(provider: ProviderConfig, model: DiscoveredModel):
 }
 
 export function selectModelsForProbe(provider: ProviderConfig, models: DiscoveredModel[]): DiscoveredModel[] {
-  const sortedModels = [...models].sort((a, b) => a.id.localeCompare(b.id))
-  const freeModels = sortedModels.filter((model) => isCandidateFreeModel(provider, model))
+  const policy = provider.probe.costPolicy ?? 'allow-unknown'
+  const sortedModels = [...models].filter((model) => {
+    if (provider.apiStyle === 'cloudflare-workers-ai' && model.task && !/text-generation|text generation|chat|conversational/i.test(model.task)) return false
+    const cost = classifyModelCost(provider, model)
+    if (policy === 'all') return true
+    if (model.isFree === false || model.hasFreeRoute === false) return false
+    return isFreeCost(cost.type) || (policy === 'allow-unknown' && cost.type === 'unknown')
+  }).sort((a, b) => a.id.localeCompare(b.id))
+  if (policy === 'all' || policy === 'free-only') return sortedModels.slice(0, provider.probe.maxModels)
+  const freeModels = sortedModels.filter((model) => isFreeCost(classifyModelCost(provider, model).type) || isCandidateFreeModel(provider, model))
   if (freeModels.length > 0) {
     return freeModels.slice(0, provider.probe.maxModels)
   }
@@ -84,9 +93,9 @@ export function selectModelsForProbe(provider: ProviderConfig, models: Discovere
 
   // 小模型集仍然允许回退全测，用“能成功响应”来发现无命名 free 的免费模型。
   // 大模型集没有 free 候选时直接跳过，避免 2 分钟 cron 下持续打出 400/403/429。
-  if (sortedModels.length > FALLBACK_ALL_MODEL_LIMIT) {
+  if (models.length > FALLBACK_ALL_MODEL_LIMIT) {
     return []
   }
 
-  return sortedModels
+  return sortedModels.slice(0, provider.probe.maxModels)
 }

@@ -256,7 +256,7 @@ async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: stri
     tokensPerSec,
     prompt: probePrompt,
     content,
-    freeStatus: 'free',
+    freeStatus: 'available',
     tokenUsage,
     checkedAt: new Date().toISOString(),
   }

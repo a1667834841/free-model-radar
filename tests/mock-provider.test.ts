@@ -72,7 +72,7 @@ describe('mock provider refresh', () => {
       const url = input.toString()
       calls.push(url)
       if (url.endsWith('/models')) {
-        return new Response(JSON.stringify({ data: [{ id: 'paid-model' }, { id: 'free-model' }] }), { status: 200 })
+        return new Response(JSON.stringify({ data: [{ id: 'paid-model' }, { id: 'free-model', pricing: { prompt: '0', completion: '0' } }] }), { status: 200 })
       }
       return streamingProbeResponse({ prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 })
     }
@@ -86,6 +86,18 @@ describe('mock provider refresh', () => {
     expect(latestResults.providers[0].models[0].freeStatus).toBe('free')
     expect(latestResults.providers[0].models[0].tokenUsage.totalTokens).toBe(4)
     expect(calls.some((call) => call.endsWith('/chat/completions'))).toBe(true)
+    const probeCount = calls.filter((call) => call.endsWith('/chat/completions')).length
+    const paidCatalog = async (input: RequestInfo | URL) => {
+      calls.push(input.toString())
+      if (!input.toString().endsWith('/models')) throw new Error('Paid model must not be probed')
+      return new Response(JSON.stringify({ data: [{ id: 'free-model', pricing: { prompt: '1', completion: '1' } }] }))
+    }
+    await runRefresh(env, 'refresh-price-change', paidCatalog as typeof fetch)
+    const updated = JSON.parse((await kv.get('latest-results')) ?? 'null')
+    expect(updated.providers[0].models[0].cost.type).toBe('paid')
+    expect(updated.providers[0].models[0].freeStatus).toBe('available')
+    expect(updated.updatedAt).toBe(latestResults.updatedAt)
+    expect(calls.filter((call) => call.endsWith('/chat/completions'))).toHaveLength(probeCount)
   })
 
   it('skips hidden models before applying maxModels so later visible models can be probed', async () => {
@@ -303,7 +315,7 @@ describe('mock provider refresh', () => {
     expect(sent[0].isNewRefresh).toBe(true)
   })
 
-  it('marks successful fallback models as free', async () => {
+  it('stores successful fallback models with unknown cost', async () => {
     const kv = new MemoryKV()
     await kv.put('providers-config', JSON.stringify({
       version: 1,
@@ -334,7 +346,8 @@ describe('mock provider refresh', () => {
 
     const latestResults = JSON.parse((await kv.get('latest-results')) ?? 'null')
     expect(latestResults.providers[0].models[0].id).toBe('glm-5.3-flash')
-    expect(latestResults.providers[0].models[0].freeStatus).toBe('free')
+    expect(latestResults.providers[0].models[0].freeStatus).toBe('available')
+    expect(latestResults.providers[0].models[0].cost.type).toBe('unknown')
   })
 
   it('processRefreshMessage drives multiple batches through the queue until done', async () => {

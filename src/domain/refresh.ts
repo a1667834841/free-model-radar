@@ -24,6 +24,7 @@ export type RefreshLock = {
 import type { ModelResult } from './result'
 import type { DiscoveredModel } from './model'
 import type { TrendSample } from './trend'
+import type { ModelCost } from './model-cost'
 
 export type RefreshJobProvider = {
   id: string
@@ -34,6 +35,7 @@ export type RefreshJobProvider = {
   cursor: number
   successfulModels: ModelResult[]
   trendSamples?: TrendSample[]
+  modelCosts?: Record<string, ModelCost>
 }
 
 export type RefreshJob = {

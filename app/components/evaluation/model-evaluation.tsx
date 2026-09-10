@@ -471,7 +471,7 @@ export default function ModelEvaluation({
         const model = row.original
         return (
           <span className={`m-status ${model.freeStatus}`}>
-            {model.freeStatus === 'free' ? t('status.free') : t('status.available')}
+            {t(`cost.${model.cost?.type ?? 'unknown'}`)}
           </span>
         )
       },
@@ -524,6 +524,7 @@ export default function ModelEvaluation({
       model: model.id,
       provider: model.providerName,
       freeStatus: model.freeStatus,
+      cost: model.cost ?? null,
       ttftMs: model.ttftMs ?? model.latencyMs,
       latencyMs: model.latencyMs,
       tokensPerSec: model.tokensPerSec,
@@ -568,7 +569,7 @@ export default function ModelEvaluation({
               <div className="m-detail-col">
                 <div className="m-detail-colhead">
                   <b>{t('detail.formulas')}</b>
-                  <span className="verdict">{model.freeStatus === 'free' ? 'FREE' : 'AVAILABLE'}</span>
+                  <span className="verdict">{t(`cost.${model.cost?.type ?? 'unknown'}`)}</span>
                 </div>
                 <ul className="m-formula-ol">
                   <li><code>{t('detail.calc.ttftFormula', { ttft: formatMs(model.ttftMs ?? model.latencyMs) })}</code></li>

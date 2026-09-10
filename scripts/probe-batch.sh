@@ -121,7 +121,7 @@ probe_model() {
     --arg checkedAt "$checked_at" '{
       id:$id, verdict:$verdict, http:($http|tonumber? // 0),
       latencyMs:$latencyMs, ttftMs:$ttftMs, tokensPerSec:$tokensPerSec,
-      availability:"available", freeStatus:"free",
+      availability:"available", freeStatus:"available",
       prompt:(if $verdict=="free" then $prompt else null end),
       content:(if $verdict=="free" then $content else null end),
       tokenUsage:(if $verdict=="free" then $tokenUsage else {promptTokens:null,completionTokens:null,totalTokens:null} end),

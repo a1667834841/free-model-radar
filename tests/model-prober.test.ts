@@ -50,14 +50,14 @@ describe('model prober', () => {
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.content).toBe('pong')
-      expect(result.freeStatus).toBe('free')
+      expect(result.freeStatus).toBe('available')
       expect(result.tokenUsage.totalTokens).toBe(20)
       expect(result.ttftMs).toBeGreaterThanOrEqual(0)
       expect(result.tokensPerSec).not.toBeNull()
     }
   })
 
-  it('marks a successful fallback model as free even when its name has no free keyword', async () => {
+  it('does not infer free access from a successful response', async () => {
     const fetchImpl = async () => sseResponse([
       'data: {"choices":[{"delta":{"content":"pong"}}]}\n\n',
       'data: [DONE]\n\n',
@@ -67,7 +67,7 @@ describe('model prober', () => {
 
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.freeStatus).toBe('free')
+      expect(result.freeStatus).toBe('available')
     }
   })
 

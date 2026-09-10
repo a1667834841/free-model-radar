@@ -1,3 +1,5 @@
+import type { ModelCost } from './model-cost'
+
 export type FreeStatus = 'free' | 'available'
 export type ProviderStatus = 'healthy' | 'empty' | 'unavailable'
 
@@ -16,6 +18,7 @@ export type ModelResult = {
   tokensPerSec?: number | null
   availability: 'available'
   freeStatus: FreeStatus
+  cost?: ModelCost
   prompt: string
   content: string | null
   tokenUsage: TokenUsage

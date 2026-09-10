@@ -16,6 +16,7 @@ import { probeModel } from './model-prober'
 import { classifyProbeFailure, isModelDueForProbe, isModelHidden, recordModelFailure, recordModelSuccess, type ModelHealthState } from './model-health-service'
 
 import { safeErrorMessage } from '@/lib/json'
+import { classifyModelCost, isFreeCost } from '@/domain/model-cost'
 
 export type StartRefreshResult =
   | { accepted: true; refreshId: string }
@@ -114,18 +115,20 @@ export async function runRefresh(env: RadarEnv, refreshId: string, fetchImpl: ty
     const hasProbeWork = currentTrendSamples.length > 0
     log(refreshId, 'runRefresh: all models done, writing final state', { total: job.total, hasProbeWork })
 
-    if (hasProbeWork) {
-      const updatedAt = new Date().toISOString()
+    if (hasProbeWork || job.providers.some((provider) => Object.keys(provider.modelCosts ?? {}).length > 0)) {
       const latestResults = await getLatestResults(env.RADAR_KV)
+      const updatedAt = !hasProbeWork && latestResults ? latestResults.updatedAt : new Date().toISOString()
       const snapshot: ResultsSnapshot = {
         updatedAt,
         refreshId,
         providers: mergeProviderResults(latestResults, job.providers.map(toProviderResult), job, batch.healthState),
       }
-      const existingTrends = await getTrendResponse(env.RADAR_KV)
-      const missingTrendSamples = createMissingTrendSamples(existingTrends.modelStats, currentTrendSamples, snapshot.updatedAt)
       await putLatestResults(env.RADAR_KV, snapshot)
-      await appendTrendSamples(env.RADAR_KV, [...currentTrendSamples, ...missingTrendSamples])
+      if (hasProbeWork) {
+        const existingTrends = await getTrendResponse(env.RADAR_KV)
+        const missingTrendSamples = createMissingTrendSamples(existingTrends.modelStats, currentTrendSamples, snapshot.updatedAt)
+        await appendTrendSamples(env.RADAR_KV, [...currentTrendSamples, ...missingTrendSamples])
+      }
     }
 
     await patchRefreshRuntimeState(env.RADAR_KV, {
@@ -249,7 +252,8 @@ async function createRefreshJob(
       const visibleModels = discoveredModels.filter((model) => !isModelHidden(healthState, provider.id, model.id))
       const dueModels = visibleModels.filter((model) => !cachedModelIds.has(model.id) || isModelDueForProbe(healthState, provider.id, model.id))
       const selectedModels = selectModelsForProbe(provider, dueModels)
-      jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, secretName: provider.secretName, models: selectedModels, cursor: 0, successfulModels: [], trendSamples: [] })
+      const modelCosts = Object.fromEntries(discoveredModels.map((model) => [model.id, classifyModelCost(provider, model)]))
+      jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, secretName: provider.secretName, models: selectedModels, cursor: 0, successfulModels: [], trendSamples: [], modelCosts })
       log(refreshId, 'discover: ok', { provider: provider.id, discovered: discoveredModels.length, visible: visibleModels.length, due: dueModels.length, selected: selectedModels.length, tookMs: Date.now() - t })
     } catch (error) {
       jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, secretName: provider.secretName, models: [], cursor: 0, successfulModels: [], trendSamples: [] })
@@ -355,10 +359,11 @@ async function processNextBatch(
   }))
   log(job.refreshId, 'processNextBatch: batch probed', { batchSize: batchModels.length, tookMs: Date.now() - batchStartMs })
 
-  for (const { providerIndex, provider, probeResult } of probeResults) {
+  for (const { providerIndex, provider, model, probeResult } of probeResults) {
     const jobProvider = nextProviders[providerIndex]
     completed += 1
     if (probeResult.ok) {
+      const cost = classifyModelCost(provider, model, probeResult.checkedAt)
       nextHealthState = recordModelSuccess(nextHealthState, provider.id, probeResult.modelId, probeResult.checkedAt)
       jobProvider.trendSamples?.push({
         providerId: provider.id,
@@ -376,7 +381,8 @@ async function processNextBatch(
         ttftMs: probeResult.ttftMs,
         tokensPerSec: probeResult.tokensPerSec,
         availability: 'available',
-        freeStatus: probeResult.freeStatus,
+        freeStatus: isFreeCost(cost.type) ? 'free' : 'available',
+        cost,
         prompt: probeResult.prompt,
         content: probeResult.content,
         tokenUsage: probeResult.tokenUsage,
@@ -449,7 +455,8 @@ function mergeProviderResults(
     const nextModelById = new Map<string, ModelResult>()
 
     for (const model of previousProvider?.models ?? []) {
-      nextModelById.set(model.id, model)
+      const cost = jobProvider?.modelCosts?.[model.id]
+      nextModelById.set(model.id, cost ? { ...model, cost, freeStatus: isFreeCost(cost.type) ? 'free' : 'available' } : model)
     }
 
     for (const model of currentProvider.models) {

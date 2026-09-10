@@ -3,6 +3,7 @@ import type { RefreshStatus, RefreshJob } from '@/domain/refresh'
 import { safeErrorMessage } from '@/lib/json'
 import { KV_KEYS } from './kv-keys'
 import { getRefreshRuntimeState, patchRefreshRuntimeState } from './refresh-runtime-store'
+import { isFreeCost } from '@/domain/model-cost'
 
 export async function getRefreshJob(kv: KVNamespace): Promise<RefreshJob | null> {
   return (await getRefreshRuntimeState(kv)).refreshJob
@@ -18,7 +19,15 @@ export async function deleteRefreshJob(kv: KVNamespace): Promise<void> {
 
 export async function getLatestResults(kv: KVNamespace): Promise<ResultsSnapshot | null> {
   const value = await kv.get(KV_KEYS.latestResults)
-  return value ? JSON.parse(value) as ResultsSnapshot : null
+  if (!value) return null
+  const snapshot = JSON.parse(value) as ResultsSnapshot
+  return { ...snapshot, providers: snapshot.providers.map((provider) => ({
+    ...provider,
+    models: provider.models.map((model) => ({
+      ...model,
+      freeStatus: model.cost && isFreeCost(model.cost.type) ? 'free' : 'available',
+    })),
+  })) }
 }
 
 export async function putLatestResults(kv: KVNamespace, snapshot: ResultsSnapshot): Promise<void> {

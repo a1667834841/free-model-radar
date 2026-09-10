@@ -10,7 +10,13 @@ export const providerConfigSchema = z.object({
   enabled: z.boolean().default(true),
   modelStrategy: z.enum(['free-first']),
   freeKeywords: z.array(z.string().min(1)).min(1),
+  billing: z.object({
+    defaultType: z.enum(['free', 'free-quota', 'trial', 'paid', 'unknown']).optional(),
+    source: z.string().min(1),
+    models: z.record(z.string(), z.enum(['free', 'free-quota', 'trial', 'paid', 'unknown'])).optional(),
+  }).optional(),
   probe: z.object({
+    costPolicy: z.enum(['free-only', 'allow-unknown', 'all']).optional(),
     maxModels: z.number().int().positive().max(500),
     concurrency: z.number().int().positive().max(50),
     attempts: z.number().int().positive().max(10),

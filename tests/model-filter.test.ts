@@ -44,7 +44,7 @@ describe('model filtering', () => {
       { id: 'b-paid' },
     ])
 
-    expect(selected.map((model) => model.id)).toEqual(['a-paid', 'b-paid', 'z-paid'])
+    expect(selected.map((model) => model.id)).toEqual(['a-paid', 'b-paid'])
   })
 
   it('skips large providers with no free candidates instead of probing all models', () => {
@@ -60,7 +60,7 @@ describe('model filtering', () => {
       { id: 'also-free-by-keyword:free', pricing: { prompt: '1', completion: '1' } },
     ])
 
-    expect(selected.map((model) => model.id)).toEqual(['also-free-by-keyword:free', 'free-by-pricing'])
+    expect(selected.map((model) => model.id)).toEqual(['free-by-pricing'])
   })
 
   it('does not fallback to all OpenRouter models when no pricing-free models are due', () => {
@@ -113,7 +113,7 @@ describe('model filtering', () => {
       { id: 'also-free-by-keyword:free', pricings: { prompt: [{ value: 1 }], completion: [{ value: 1 }] } },
     ])
 
-    expect(selected.map((model) => model.id)).toEqual(['also-free-by-keyword:free', 'free-by-pricings'])
+    expect(selected.map((model) => model.id)).toEqual(['free-by-pricings'])
   })
 
   it('treats ZenMux completion-only zero pricing as paid', () => {

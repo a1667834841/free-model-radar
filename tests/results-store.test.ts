@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getRefreshStatusOrTransient } from '@/storage/results-store'
+import { getLatestResults, getRefreshStatusOrTransient } from '@/storage/results-store'
 
 class FailingGetKV {
   calls = 0
@@ -35,6 +35,15 @@ class EventuallySuccessfulGetKV {
 }
 
 describe('results store', () => {
+  it('does not preserve unverified free labels from legacy snapshots', async () => {
+    const kv = { get: async () => JSON.stringify({ providers: [{ models: [
+      { id: 'legacy', freeStatus: 'free' },
+      { id: 'paid', freeStatus: 'free', cost: { type: 'paid' } },
+      { id: 'verified', freeStatus: 'available', cost: { type: 'free' } },
+    ] }] }) }
+    const snapshot = await getLatestResults(kv as unknown as KVNamespace)
+    expect(snapshot?.providers[0].models.map(model => model.freeStatus)).toEqual(['available', 'available', 'free'])
+  })
   it('retries refresh status KV get before returning a status', async () => {
     const kv = new EventuallySuccessfulGetKV()
     const status = await getRefreshStatusOrTransient(kv as unknown as KVNamespace)

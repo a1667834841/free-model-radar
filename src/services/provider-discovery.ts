@@ -22,7 +22,7 @@ function parseModelsPayload(payload: unknown): DiscoveredModel[] {
       const pricing = (item as { pricing?: unknown }).pricing
       const pricings = (item as { pricings?: unknown }).pricings
       const hasFreeRoute = (item as { has_free_route?: unknown }).has_free_route
-      const isFree = (item as { is_free?: unknown }).is_free
+      const isFree = (item as { is_free?: unknown; free?: unknown }).is_free ?? (item as { free?: unknown }).free
       const model: DiscoveredModel = {
         id,
         pricing: pricing && typeof pricing === 'object' ? pricing as DiscoveredModel['pricing'] : null,
