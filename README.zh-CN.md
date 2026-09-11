@@ -114,11 +114,26 @@ npx wrangler secret put TELEGRAM_CHAT_ID
 
 `/api/monitor` 是独立健康检查入口，需要请求头 `Authorization: Bearer <MONITOR_TOKEN>`。它会检查结果是否超过 `REFRESH_STALE_AFTER_SECONDS`（默认 1 小时）、刷新是否失败或卡在 running 状态，并在状态变化或达到冷却时间后通过 Telegram Bot 通知。
 
-建议在 GitHub Actions 中配置 `RADAR_MONITOR_URL`（例如 `https://fm.ggball.top/api/monitor`）和 `RADAR_MONITOR_TOKEN`，仓库内的 `.github/workflows/refresh-monitor.yml` 每 30 分钟调用一次。该监听不依赖 Cloudflare Cron，因此 Cron 完全停止时也能报警。
+仓库内的 `.github/workflows/refresh-monitor.yml` 每 30 分钟调用一次。需要在 GitHub Actions Secrets 中配置：
+
+```text
+RADAR_MONITOR_URL=https://你的域名/api/monitor
+RADAR_MONITOR_TOKEN=与 Cloudflare 的 MONITOR_TOKEN 相同
+```
+
+该监听不依赖 Cloudflare Cron，因此 Cron 完全停止时也能报警。健康时接口返回 HTTP 200；异常时返回 HTTP 503，便于 GitHub Actions 判定失败。
 
 Telegram 配置需要先创建 Bot，并将 Bot 加入接收告警的会话；`TELEGRAM_ALERT_COOLDOWN_SECONDS` 可选，默认 6 小时。密钥只放在 Cloudflare Secrets/GitHub Actions Secrets，不写入仓库。
 
 `REFRESH_JOB_STALE_AFTER_SECONDS` 可选，默认 7200 秒。Cron 发现刷新 job 超过该时长仍未完成时，会回收僵尸 job 并重新入队，避免 Queue 接力消息丢失后永久停在 running。
+
+手动验证监控接口：
+
+```bash
+curl -H "Authorization: Bearer $MONITOR_TOKEN" https://你的域名/api/monitor
+```
+
+不要将 `TELEGRAM_BOT_TOKEN`、`MONITOR_TOKEN` 或真实 Chat ID 写入仓库、日志、URL 或前端代码。
 
 ## KV
 
