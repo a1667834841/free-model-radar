@@ -82,8 +82,6 @@ type SortState = {
   direction: SortDirection
 } | null
 
-const CODING_SKILL_INSTALL_COMMAND = 'npx skills add https://github.com/a1667834841/free-model-radar --skill recommend-fast-llm'
-
 const SORT_LABEL_KEYS: Record<SortKey, 'table.col.latency' | 'table.col.ttft' | 'table.col.tps' | 'table.col.e2e' | 'table.col.score'> = {
   latency: 'table.col.latency',
   ttft: 'table.col.ttft',
@@ -165,15 +163,6 @@ function ModelCapabilityTags({ model }: { model: RankedModel }) {
   )
 }
 
-function CopyIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <rect x="5.5" y="5.5" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" stroke="currentColor" strokeWidth="1.2" />
-    </svg>
-  )
-}
-
 export default function ModelEvaluation({
   models,
   providers,
@@ -187,8 +176,6 @@ export default function ModelEvaluation({
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchActiveIndex, setSearchActiveIndex] = useState(0)
-  const [codingKitOpen, setCodingKitOpen] = useState(false)
-  const [codingKitCopied, setCodingKitCopied] = useState(false)
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
   const rankedModels = useMemo(() => method.rank(models), [models, method])
@@ -196,15 +183,6 @@ export default function ModelEvaluation({
   const providerMeta = useMemo(() => {
     return Object.fromEntries(providers.map((provider) => [provider.id, provider]))
   }, [providers])
-  const codingModel = useMemo(() => {
-    const healthyProvider = (model: RankedModel) => providerMeta[model.providerId]?.status === 'healthy'
-    const codingName = /code|coder|coding|deepseek|qwen|claude|gpt|gemini|glm|kimi|mimo|minimax|nemotron|llama/i
-    const codingCandidates = rankedModels.filter((model) => {
-      const capability = getModelCapability(model)
-      return healthyProvider(model) && !capability.isEmbedding && !capability.canGenerateImage && codingName.test(model.id)
-    })
-    return codingCandidates[0] ?? rankedModels.find((model) => healthyProvider(model) && !getModelCapability(model).isEmbedding) ?? rankedModels[0] ?? null
-  }, [providerMeta, rankedModels])
 
   // ── json-viewer：首次展开时才构建数据集（惰性渲染）
   const [jsonOpen, setJsonOpen] = useState(false)
@@ -357,19 +335,6 @@ export default function ModelEvaluation({
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }, [rankingDataset])
-
-  const handleCopyCodingKit = useCallback(async () => {
-    const recommendation = codingModel
-      ? `# 当前 Coding 推荐：${codingModel.providerName} / ${codingModel.id}`
-      : '# 当前暂无可推荐 Coding 模型'
-    try {
-      await navigator.clipboard.writeText(`${CODING_SKILL_INSTALL_COMMAND}\n${recommendation}`)
-      setCodingKitCopied(true)
-      window.setTimeout(() => setCodingKitCopied(false), 1600)
-    } catch {
-      setCodingKitCopied(false)
-    }
-  }, [codingModel])
 
   useEffect(() => {
     return () => {
@@ -757,33 +722,6 @@ export default function ModelEvaluation({
             >
               {t('agent.copy')}
             </button>
-          </div>
-          <div className="coding-kit">
-            <button
-              type="button"
-              className={`coding-kit-trigger${codingKitOpen ? ' open' : ''}${codingKitCopied ? ' copied' : ''}`}
-              onClick={() => {
-                setCodingKitOpen((open) => !open)
-                void handleCopyCodingKit()
-              }}
-              aria-expanded={codingKitOpen}
-              aria-controls="coding-kit-menu"
-            >
-              <span className="coding-kit-copy-icon" aria-hidden="true"><CopyIcon /></span>
-              {codingKitCopied ? t('codingKit.copied') : t('codingKit.install')}
-              <span className="coding-kit-caret" aria-hidden="true">⌃</span>
-            </button>
-            {codingKitOpen && (
-              <div id="coding-kit-menu" className="coding-kit-menu">
-                <div className="coding-kit-menu-label">{t('codingKit.title')}</div>
-                <div className="coding-kit-model">
-                  <span className="coding-kit-model-provider">{codingModel?.providerName ?? '—'}</span>
-                  <strong>{codingModel?.id ?? t('codingKit.noModel')}</strong>
-                </div>
-                <code className="coding-kit-command">{CODING_SKILL_INSTALL_COMMAND}</code>
-                <div className="coding-kit-help">{t('codingKit.help')}</div>
-              </div>
-            )}
           </div>
         </div>
       </div>

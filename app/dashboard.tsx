@@ -17,6 +17,7 @@ import {
   getEvaluationMethod,
   resolveStreamingMetrics,
 } from '@/domain/evaluation'
+import { getModelCapability } from './model-capabilities'
 import type { RefreshStatus } from '@/domain/refresh'
 
 type FlattenedModel = ModelResult & { providerId: string; providerName: string }
@@ -80,6 +81,105 @@ function getProviderFact(provider: ProviderResult, t: ReturnType<typeof useI18n>
       ? t(fact.modelsLabel.includes('routed') ? 'overview.models.routed' : 'overview.models.count', { count })
       : t('overview.models.unknown')
   return { ...fact, freeTier: t(fact.freeTier), signup: t(fact.signup), modelsLabel }
+}
+
+const CODING_SKILL_INSTALL_COMMAND = 'npx skills add https://github.com/a1667834841/free-model-radar --skill recommend-fast-llm'
+const MCP_AGENT_PROMPT = `请作为我的 Coding Agent，帮我安装并配置一个可用的 free-model-radar MCP。
+
+目标：让我可以在当前 Agent 中读取最新的免费模型测评，并推荐适合 Coding 的前五个模型。
+
+请按以下顺序执行：
+1. 检查当前 Agent（Codex / Claude Code / OpenCode）的 MCP 配置格式和配置文件位置。
+2. 从 https://github.com/a1667834841/free-model-radar 查找真实存在、可运行的 MCP server 或官方接入方式。
+3. 安装前先确认包名、版本、启动命令和权限范围；不要猜测不存在的 npm 包、命令或 URL。
+4. 将 MCP 配置写入当前 Agent 的用户级配置，并保留已有配置。
+5. 启动后调用一次工具，读取 https://fm.ggball.top/api/results 验证连通性。
+6. 最后返回 MCP 名称、配置文件、验证结果和当前最适合 Coding 的前五个模型。
+
+如果仓库没有提供可用 MCP server，请明确说明原因，不要伪造安装成功；改为给出最小的替代方案。`
+
+function CopyIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="5.5" y="5.5" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  )
+}
+
+function RawDataCopyMenu({ models }: { models: FlattenedModel[] }) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const [copied, setCopied] = useState<'skills' | 'json' | 'mcp' | null>(null)
+  const rankedModels = useMemo(() => getEvaluationMethod(DEFAULT_EVALUATION_METHOD_ID).rank(models), [models])
+  const codingModel = useMemo(() => {
+    const codingName = /code|coder|coding|deepseek|qwen|claude|gpt|gemini|glm|kimi|mimo|minimax|nemotron|llama/i
+    return rankedModels.find((model) => {
+      const capability = getModelCapability(model)
+      return !capability.isEmbedding && !capability.canGenerateImage && codingName.test(model.id)
+    }) ?? rankedModels.find((model) => !getModelCapability(model).isEmbedding) ?? rankedModels[0] ?? null
+  }, [rankedModels])
+  const rankingJson = useMemo(() => JSON.stringify({
+    meta: { title: t('table.title'), sample: false },
+    models: rankedModels.map((model, index) => ({
+      rank: index + 1,
+      name: model.id,
+      ttft_ms: model.ttftMs ?? model.latencyMs,
+      tps: model.tokensPerSec ?? null,
+      e2e_ms: model.latencyMs,
+      scale: null,
+    })),
+  }, null, 2), [rankedModels, t])
+
+  const copy = useCallback(async (kind: 'skills' | 'json' | 'mcp') => {
+    const recommendation = codingModel
+      ? `# 当前 Coding 推荐：${codingModel.providerName} / ${codingModel.id}`
+      : '# 当前暂无可推荐 Coding 模型'
+    const text = kind === 'skills'
+      ? `${CODING_SKILL_INSTALL_COMMAND}\n${recommendation}`
+      : kind === 'mcp' ? MCP_AGENT_PROMPT : rankingJson
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(kind)
+      setOpen(false)
+      window.setTimeout(() => setCopied(null), 1600)
+    } catch {
+      setCopied(null)
+    }
+  }, [codingModel, rankingJson])
+
+  return (
+    <div className="raw-copy-menu">
+      <button
+        type="button"
+        className={`raw-copy-trigger${open ? ' open' : ''}${copied ? ' copied' : ''}`}
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-controls="raw-copy-options"
+      >
+        <CopyIcon />
+        <span>{copied ? t('rawCopy.copied') : t('rawCopy.button')}</span>
+        <span className="raw-copy-caret" aria-hidden="true">⌃</span>
+      </button>
+      {open && (
+        <div id="raw-copy-options" className="raw-copy-options" role="menu">
+          <div className="raw-copy-heading">{t('rawCopy.title')}</div>
+          <button type="button" className="raw-copy-option" role="menuitem" onClick={() => void copy('skills')}>
+            <span className="raw-copy-option-icon"><CopyIcon /></span>
+            <span><strong>{t('rawCopy.skills')}</strong><small>{t('rawCopy.skillsNote')}</small></span>
+          </button>
+          <button type="button" className="raw-copy-option" role="menuitem" onClick={() => void copy('json')}>
+            <span className="raw-copy-option-icon"><CopyIcon /></span>
+            <span><strong>{t('rawCopy.json')}</strong><small>{t('rawCopy.jsonNote')}</small></span>
+          </button>
+          <button type="button" className="raw-copy-option" role="menuitem" onClick={() => void copy('mcp')}>
+            <span className="raw-copy-option-icon"><CopyIcon /></span>
+            <span><strong>{t('rawCopy.mcp')}</strong><small>{t('rawCopy.mcpNote')}</small></span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 /** 数字滚动展示（设计稿 .kpi-big[data-count] 行为）。 */
@@ -345,7 +445,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
         </div>
         <div className="hero-cta">
           {isAdmin ? <RefreshButton /> : null}
-          <a className="btn btn-ghost" href="/api/results" target="_blank" rel="noreferrer">{t('page.rawData')}</a>
+          <RawDataCopyMenu models={models} />
         </div>
       </section>
 
