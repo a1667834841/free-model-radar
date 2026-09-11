@@ -1,200 +1,156 @@
 ---
 name: recommend-fast-llm
-description: 基于 free-model-radar results API 推荐 3 个速度快且前沿的大语言模型，输出厂商和模型 id。用于用户询问“当前免费模型推荐”“推荐三个快且前沿的大模型”“查 free-model-radar API 并推荐模型”等任务。
+description: 基于 free-model-radar 最新实时测评数据，筛选并推荐前五个适合 Coding 的免费大语言模型。用户询问当前 Coding 模型、编程模型、最快且适合开发的免费模型，或要求读取 radar 数据推荐模型时使用。
 ---
 
-# 推荐快速前沿大模型（Recommend Fast LLM）
+# 推荐 Coding 模型
 
-## 何时使用
+## 目标
 
-- 用户要求基于 free-model-radar 的实时结果推荐模型。
-- 用户询问当前哪个免费大语言模型速度快、延迟低、吞吐高、模型较新。
-- 用户要求输出“厂商 + 模型 id”的 Top 3 推荐。
+每次运行都读取最新的 free-model-radar 数据，输出最多 5 个真正适合日常 Coding 的模型。质量优先于数量；合格候选不足 5 个时只输出合格候选，不使用弱模型凑数。
+
+“适合 Coding”同时满足以下条件：模型家族可靠且版本较新、上下文在 128K–1M、是通用大语言模型、实时探测可用、交互速度可接受。
 
 ## 数据源
 
-优先调用线上 results API：
+必须优先读取线上接口：
 
 ```bash
-curl -sS --max-time 30 https://free-model-radar.1667834841.workers.dev/api/results -o /tmp/radar-results.json -w 'HTTP %{http_code}\n'
+curl -sS --fail --max-time 30 \
+  https://fm.ggball.top/api/results \
+  -o /tmp/radar-results.json \
+  -w 'HTTP %{http_code}\n'
 ```
 
-关键结构：
+检查：
 
-```json
-{
-  "updatedAt": "2026-09-08T13:34:39.717Z",
-  "isStale": false,
-  "providers": [
-    {
-      "id": "openrouter",
-      "name": "OpenRouter",
-      "status": "healthy",
-      "models": [
-        {
-          "id": "nvidia/nemotron-3-nano-30b-a3b",
-          "ttftMs": 1199,
-          "tokensPerSec": 206.45,
-          "latencyMs": 1240,
-          "freeStatus": "free",
-          "checkedAt": "2026-08-29T16:23:12.543Z"
-        }
-      ]
-    }
-  ]
-}
+- HTTP 非 200、JSON 无法解析或没有 `updatedAt` 时停止并说明无法取得最新数据。
+- `isStale: true` 时仍可分析，但必须在结果开头标注数据已过期。
+- 使用模型自己的 `checkedAt` 判断测评新鲜度，不要只看全局 `updatedAt`。
+- 优先使用 `app/model-capabilities.ts` 中按 Provider 和完整模型 ID 匹配的上下文与能力信息；没有能力信息的模型视为上下文未知，不进入 Coding 推荐。
+
+## 硬性筛选
+
+逐条应用，任何一条不满足都排除：
+
+1. Provider 的 `status` 必须为 `healthy`。
+2. 如果模型有 `freeStatus` 字段，必须等于 `free`；不能把 `available` 当作免费。
+3. `availability` 存在时必须为可用状态。
+4. `checkedAt` 距当前时间不超过 36 小时；如果候选不足 5 个，最多放宽到 72 小时，并在该模型后标记“数据较旧”。
+5. 必须是通用 LLM：`isLlm === true`，且不是 embedding、image、audio、video、TTS、OCR、rerank 或 moderation 模型。
+6. 上下文窗口必须满足 `128000 <= contextWindow <= 1048576`。将 `1.05M` 视为约 1,048,576；“未知”直接排除。
+7. 必须有有效的 `ttftMs`、`latencyMs`、`tokensPerSec` 数字。
+8. 默认速度门槛：`ttftMs <= 3000`、`latencyMs <= 8000`、`tokensPerSec >= 10`。
+
+以下名称信号直接排除：
+
+```text
+embedding translate safety safeguard moderation image video audio tts ocr rerank
+vision-exp vision-only flash-lite nano mini-small 1b 3b 7b
 ```
 
-## 筛选规则
+`mini` 不能单独排除所有模型，但 `gpt-4.1-mini`、`gpt-4.1-nano` 这类轻量模型不能作为 Coding 主推荐，除非没有任何更高质量候选。
 
-先过滤真实可用的 chat 模型：
+## 模型质量白名单
 
-- `freeStatus === 'free'`
-- `availability` 可用（如存在且不是失败态）
-- `provider.status === 'healthy'`
-- `ttftMs` 和 `tokensPerSec` 必须是有效数字
-- 排除 `checkedAt` 超过 7 天的数据；如果剩余太少，可放宽到 30 天并在输出里注明“数据较旧”
-- 排除明显非 chat 的专用模型：`embedding`、`translate`、`safety`、`image`、`video`、`tts`、`audio`、`ocr` 等
+优先选择下列新版本模型家族。模型 ID 必须能明确匹配家族和版本，不能只因为包含 `code` 或 `free` 就放行。
 
-速度评分建议：
+第一优先级：
 
-- 主排序：综合体验优先看 `ttftMs` 越低越好
-- 同档延迟再看 `tokensPerSec` 越高越好
-- 可给简单分数：`score = tokensPerSec - max(0, ttftMs - 800) * 0.02`
-  - 目标是让“首字快且吞吐高”的模型胜出
-  - 若用户更关注连续生成速度，则改为直接按 `tokensPerSec` 降序
+- OpenAI：`gpt-5+`、`gpt-oss-120b+`
+- Anthropic：较新的 `claude-sonnet-*`、`claude-opus-*`
+- Google：`gemini-3+`
+- DeepSeek：`deepseek-v4+`
+- Qwen：`qwen3.6+`
+- GLM：`glm-5+`
+- Kimi：`kimi-k3+`
+- MiniMax：`minimax-m3+`
+- NVIDIA Nemotron：`nemotron-3+`，但排除 safety/content-safety/omni 专用变体
 
-前沿性规则：
+第二优先级：
 
-优先选择新模型家族或高版本模型，例如：
+- 较新的 `ling-3+`、`hy3/hy4`、`north-mini-code`
+- 其他大型厂商新模型，只有在能力、上下文和实时性能均有数据时才允许进入候选
 
-- `gpt-5`, `gpt-6`
-- `claude-opus-4-7`, `claude-opus-5`, `claude-sonnet-5`, `claude-fable`
-- `gemini-3`, `gemini-4`
-- `qwen3.5`, `qwen3.6`, `qwen3.7`, `qwen3.8`
-- `glm-5`, `glm-5.2`, `glm-5.3`
-- `deepseek-v4`
-- `kimi-k3`
-- `minimax-m3`
-- `nemotron-3`, `nemotron-3.5`, `nemotron-4`
-- `ling-3`, `hy3`, `mimo-v2.5`
+Provider 只是接入渠道，不等于模型质量。OpenRouter、NVIDIA NIM、Groq、AIHubMix 等渠道上的同一上游模型，按上游模型家族判断质量，再按实际渠道性能排序。
 
-降低优先级：
+## Coding 排名
 
-- 明显旧代模型：`gpt-4`, `llama-3.1`, `mistral` 早期版本、`deepseek-v3`、旧 `glm-4.x`
-- 小工具模型：翻译、安全、embedding，除非用户明确要
-- 只快但不“大语言模型前沿”的 nano/mini 模型，除非没有任何强模型满足速度要求
+先按质量分级，再计算速度和新鲜度。质量分不得被极高 TPS 的弱模型反超。
 
-最终选择：
+质量等级建议：
 
-- 如果 Top 速度模型全是旧模型，优先取“足够快且前沿”的模型，而不是单纯最快。
-- 输出 3 个；如某个厂商已有模型入选，第三个尽量换厂商，保证推荐面更广。
-
-## 推荐执行脚本
-
-用 Python 一次完成筛选与排序：
-
-```python
-import json
-from datetime import datetime, timezone
-
-data = json.load(open('/tmp/radar-results.json'))
-now = datetime.now(timezone.utc)
-
-def parse_dt(value):
-    if not value:
-        return None
-    return datetime.fromisoformat(value.replace('Z', '+00:00'))
-
-def is_non_chat(model_id: str) -> bool:
-    banned = ('embedding', 'translate', 'safety', 'image', 'video', 'tts', 'audio', 'ocr', 'vision-exp')
-    lowered = model_id.lower()
-    return any(token in lowered for token in banned)
-
-def modern_score(model_id: str) -> int:
-    lowered = model_id.lower()
-    patterns = [
-        'gpt-5', 'gpt-6', 'claude-opus-4-7', 'claude-opus-5', 'claude-sonnet-5', 'claude-fable',
-        'gemini-3', 'gemini-4', 'qwen3.5', 'qwen3.6', 'qwen3.7', 'qwen3.8',
-        'glm-5', 'deepseek-v4', 'kimi-k3', 'minimax-m3', 'nemotron-3', 'ling-3', 'hy3', 'mimo-v2.5',
-    ]
-    old_patterns = ['gpt-4', 'llama-3.1', 'deepseek-v3', 'glm-4.']
-    if any(p in lowered for p in old_patterns) and not any(p in lowered for p in patterns):
-        return 1
-    return 3 if any(p in lowered for p in patterns) else 2
-
-candidates = []
-for provider in data.get('providers', []):
-    if provider.get('status') != 'healthy':
-        continue
-    for model in provider.get('models', []):
-        if model.get('freeStatus') != 'free':
-            continue
-        if is_non_chat(model.get('id', '')):
-            continue
-        ttft = model.get('ttftMs')
-        tps = model.get('tokensPerSec')
-        if not isinstance(ttft, (int, float)) or not isinstance(tps, (int, float)):
-            continue
-        checked_at = parse_dt(model.get('checkedAt'))
-        age_days = (now - checked_at).total_seconds() / 86400 if checked_at else None
-        if age_days is None or age_days > 30:
-            continue
-        score = float(tps) - max(0, float(ttft) - 800) * 0.02 + modern_score(model.get('id', '')) * 30
-        candidates.append({
-            'provider_name': provider.get('name') or provider.get('id'),
-            'model_id': model.get('id'),
-            'ttftMs': ttft,
-            'tokensPerSec': tps,
-            'latencyMs': model.get('latencyMs'),
-            'age_days': age_days,
-            'modern_score': modern_score(model.get('id', '')),
-            'score': score,
-        })
-
-candidates.sort(key=lambda x: x['score'], reverse=True)
-picks = []
-used_providers = set()
-for item in candidates:
-    if item['provider_name'] in used_providers and len(picks) < 3:
-        continue
-    picks.append(item)
-    used_providers.add(item['provider_name'])
-    if len(picks) == 3:
-        break
-
-for item in picks:
-    print(f"{item['provider_name']} -> {item['model_id']} | TTFT {item['ttftMs']}ms | {item['tokensPerSec']} t/s | modern {item['modern_score']}/3")
+```text
+S：Claude Opus/Sonnet、GPT-5+、Gemini 3+、DeepSeek V4、Qwen 3.8+、GLM-5+、Kimi K3、MiniMax M3
+A：其他满足白名单和硬性条件的新模型
 ```
 
-如果去重后不足 3 个，再从 `candidates` 里补齐同厂商或其他厂商。
+速度等级：
 
-## 输出格式
+```text
+优秀：TTFT <= 1500ms，E2E <= 3000ms，TPS >= 20
+可接受：TTFT <= 3000ms，E2E <= 8000ms，TPS >= 10
+```
 
-用中文简洁输出：
+建议排序分数：
+
+```text
+speedScore =
+  0.50 * clamp(1 - ttftMs / 3000, 0, 1) * 100
+  + 0.30 * clamp(1 - latencyMs / 8000, 0, 1) * 100
+  + 0.20 * clamp(tokensPerSec / 80, 0, 1) * 100
+
+finalScore =
+  qualityScore * 0.50
+  + speedScore * 0.35
+  + freshnessScore * 0.10
+  + stabilityScore * 0.05
+```
+
+其中：
+
+- `qualityScore`：S 级 100，A 级 82；轻量模型不能获得 S 级。
+- `freshnessScore`：24 小时内 100，36 小时内 85，72 小时内 65。
+- `stabilityScore`：如果有历史样本，按最近最多 5 次探测成功率计算；没有历史数据取 70。
+- `clamp` 使用 `min(max(value, min), max)`。
+
+排序后进行去重：同一个上游模型通过多个 Provider 提供时，保留分数最高的渠道；同一 Provider 最多保留 2 个模型，尽量覆盖不同上游模型家族。
+
+## 推荐输出
+
+用中文输出最多 5 个，不输出内部评分细节堆砌：
 
 ```markdown
-推荐这 3 个当前免费可用、速度快且较前沿的大语言模型：
+推荐这 5 个当前最适合 Coding 的免费模型：
 
-1. **厂商名**
-   - 模型 id：`model-id`
-   - 实测：TTFT `xxx ms`，吞吐 `xxx tokens/s`
-   - 推荐理由：…
+1. **Provider 名称**
+   - 模型：`model-id`
+   - 上下文：`xxx`
+   - 实测：TTFT `xxx ms`，端到端 `xxx ms`，吞吐 `xxx tokens/s`
+   - 推荐理由：说明模型质量、版本、速度和适用场景
 
-2. **厂商名**
-   - 模型 id：`model-id`
-   - 实测：TTFT `xxx ms`，吞吐 `xxx tokens/s`
-   - 推荐理由：…
-
-3. **厂商名**
-   - 模型 id：`model-id`
-   - 实测：TTFT `xxx ms`，吞吐 `xxx tokens/s`
-   - 推荐理由：…
+2. ...
 ```
 
-## 注意事项
+如果少于 5 个合格候选，标题改为“当前找到 N 个合格 Coding 模型”，并说明缺少候选的原因。不要把上下文未知、速度超标或质量明显偏弱的模型补进来。
 
-- 不要把 `content`、`prompt` 里的采样文本原样粘进推荐，除非用于说明证据。
-- `isStale: true` 时提醒用户“radar 数据较旧，推荐基于上一次刷新”。
-- `tokensPerSec` 很高但 `completionTokens` 很短的样本要谨慎，尤其 nano/mini 模型；如果综合分高，可标为“轻量模型”而不是前沿主力模型。
-- 用户如果明确要求“最快”，则按速度优先；用户要求“快且前沿”，才启用前沿性加权。
+## 选择默认 Coding 模型
+
+如果调用方只需要一个模型，选择排序第一名，但必须满足 S 级或 A 级质量和“可接受”速度。不要选择仅凭模型名称猜测 Coding 能力的模型。
+
+如果第一名是质量强但速度偏慢的 Claude/GPT/Gemini 模型，而第二名是质量可靠且速度明显更好的 DeepSeek/Qwen/GLM/MiniMax 模型，同时两者都合格：
+
+- 默认主模型选择质量更高者；
+- 在备选中保留速度更快者；
+- 明确说明“质量优先”或“交互速度优先”的取舍。
+
+## 运行脚本要求
+
+可以使用 Python、Node.js 或 shell 处理 JSON，但必须实际执行筛选，不要凭记忆推荐。脚本至少要打印：
+
+- 数据更新时间和 `isStale`
+- 通过硬性筛选的候选数
+- 最终前五的 Provider、模型 ID、上下文、TTFT、E2E、TPS
+- 被排除的主要原因计数
+
+不要输出 `content`、`prompt` 或任何 API Key、Authorization header。
