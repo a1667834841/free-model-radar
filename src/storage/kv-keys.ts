@@ -6,5 +6,6 @@ export const KV_KEYS = {
   refreshLock: 'refresh-lock',
   refreshRuntimeState: 'refresh-runtime-state',
   refreshJob: 'refresh-job',
+  refreshMonitorState: 'refresh-monitor-state',
   trendPrefix: 'trend:',
 } as const

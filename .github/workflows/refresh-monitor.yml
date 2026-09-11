@@ -1,0 +1,21 @@
+name: Monitor refresh health
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check refresh health and notify Telegram
+        env:
+          MONITOR_URL: ${{ secrets.RADAR_MONITOR_URL }}
+          MONITOR_TOKEN: ${{ secrets.RADAR_MONITOR_TOKEN }}
+        run: |
+          test -n "$MONITOR_URL"
+          test -n "$MONITOR_TOKEN"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $MONITOR_TOKEN" \
+            "$MONITOR_URL"

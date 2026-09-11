@@ -44,6 +44,31 @@ class MemoryKV {
 }
 
 describe('mock provider refresh', () => {
+  it('marks the refresh failed when every provider discovery fails', async () => {
+    const kv = new MemoryKV()
+    await kv.put('providers-config', JSON.stringify({
+      version: 1,
+      updatedAt: '2026-08-27T09:00:00.000Z',
+      providers: [{
+        id: 'provider-a',
+        name: 'Provider A',
+        baseUrl: 'https://api.example.com/v1',
+        secretName: 'PROVIDER_A_KEY',
+        enabled: true,
+        modelStrategy: 'free-first',
+        freeKeywords: ['free'],
+        probe: { maxModels: 20, concurrency: 1, attempts: 1, timeoutMs: 10000 },
+      }],
+    }))
+
+    const env = { RADAR_KV: kv as unknown as KVNamespace, PROVIDER_A_KEY: 'key' } satisfies RadarEnv
+    await runRefresh(env, 'refresh-discovery-failed', async () => new Response('upstream failed', { status: 503 }) as Response)
+
+    const status = (await getRefreshRuntimeState(kv as unknown as KVNamespace)).refreshStatus
+    expect(status?.status).toBe('failed')
+    expect(status?.error).toContain('discovery failed for all providers')
+  })
+
   it('discovers free models, probes them, and stores latest results', async () => {
     const kv = new MemoryKV()
     await kv.put('providers-config', JSON.stringify({

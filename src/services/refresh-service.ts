@@ -24,6 +24,7 @@ export type StartRefreshResult =
 
 const DEFAULT_REFRESH_PROGRESS = { completed: 0, total: 0 }
 const MAX_MODELS_PER_INVOCATION = 5
+const DEFAULT_STALE_JOB_AFTER_SECONDS = 2 * 60 * 60
 
 function log(refreshId: string, message: string, meta?: Record<string, unknown>): void {
   const detail = meta && Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : ''
@@ -32,7 +33,28 @@ function log(refreshId: string, message: string, meta?: Record<string, unknown>)
 
 export async function startRefresh(env: RadarEnv, queue: Queue<RefreshQueueMessage>, fetchImpl: typeof fetch = fetch): Promise<StartRefreshResult> {
   const startedAt = Date.now()
-  const existingJob = await getRefreshJob(env.RADAR_KV)
+  let existingJob = await getRefreshJob(env.RADAR_KV)
+  const staleAfterSeconds = typeof env.REFRESH_JOB_STALE_AFTER_SECONDS === 'string' && Number(env.REFRESH_JOB_STALE_AFTER_SECONDS) > 0
+    ? Number(env.REFRESH_JOB_STALE_AFTER_SECONDS)
+    : DEFAULT_STALE_JOB_AFTER_SECONDS
+  const existingStartedAt = existingJob ? Date.parse(existingJob.startedAt) : NaN
+  if (existingJob && Number.isFinite(existingStartedAt) && Date.now() - existingStartedAt > staleAfterSeconds * 1000) {
+    const staleRefreshId = existingJob.refreshId
+    log(staleRefreshId, 'startRefresh: reclaiming stale refresh job', { ageMs: Date.now() - existingStartedAt, staleAfterSeconds })
+    await patchRefreshRuntimeState(env.RADAR_KV, {
+      refreshJob: null,
+      refreshStatus: {
+        status: 'failed',
+        refreshId: staleRefreshId,
+        startedAt: existingJob.startedAt,
+        finishedAt: new Date().toISOString(),
+        error: `Refresh job exceeded stale timeout (${staleAfterSeconds}s)`,
+        configVersion: existingJob.configVersion,
+        progress: { completed: existingJob.completed, total: existingJob.total },
+      },
+    })
+    existingJob = null
+  }
   const refreshId = existingJob?.refreshId ?? createRefreshId()
 
   if (existingJob) {
@@ -75,6 +97,9 @@ export async function runRefresh(env: RadarEnv, refreshId: string, fetchImpl: ty
       const t1 = Date.now()
       job = await createRefreshJob(env, refreshId, config.providers.filter((provider) => provider.enabled), config.version, fetchImpl)
       log(refreshId, 'runRefresh: created new job', { tookMs: Date.now() - t1, total: job.total, providers: job.providers.length })
+      if (job.discoveryFailures && job.discoveryFailures.length === job.providers.length && job.providers.length > 0) {
+        throw new Error(`Provider discovery failed for all providers: ${job.discoveryFailures.map((failure) => `${failure.providerId}: ${failure.error}`).join('; ')}`)
+      }
       await patchRefreshRuntimeState(env.RADAR_KV, {
         refreshJob: job,
         refreshStatus: {
@@ -241,6 +266,7 @@ async function createRefreshJob(
 ): Promise<RefreshJob> {
   const healthState = await getModelHealthState(env.RADAR_KV)
   const jobProviders: RefreshJobProvider[] = []
+  const discoveryFailures: Array<{ providerId: string; error: string }> = []
 
   for (const provider of providers) {
     const t = Date.now()
@@ -256,6 +282,7 @@ async function createRefreshJob(
       jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, secretName: provider.secretName, models: selectedModels, cursor: 0, successfulModels: [], trendSamples: [], modelCosts })
       log(refreshId, 'discover: ok', { provider: provider.id, discovered: discoveredModels.length, visible: visibleModels.length, due: dueModels.length, selected: selectedModels.length, tookMs: Date.now() - t })
     } catch (error) {
+      discoveryFailures.push({ providerId: provider.id, error: safeErrorMessage(error) })
       jobProviders.push({ id: provider.id, name: provider.name, baseUrl: provider.baseUrl, secretName: provider.secretName, models: [], cursor: 0, successfulModels: [], trendSamples: [] })
       log(refreshId, 'discover: FAILED', { provider: provider.id, error: safeErrorMessage(error), tookMs: Date.now() - t })
     }
@@ -268,6 +295,7 @@ async function createRefreshJob(
     providers: jobProviders,
     completed: 0,
     total: jobProviders.reduce((total, provider) => total + provider.models.length, 0),
+    discoveryFailures,
   }
 }
 

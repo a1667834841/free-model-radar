@@ -45,6 +45,7 @@ export type RefreshJob = {
   providers: RefreshJobProvider[]
   completed: number
   total: number
+  discoveryFailures?: Array<{ providerId: string; error: string }>
 }
 
 export function createRefreshId(now = new Date()): string {
