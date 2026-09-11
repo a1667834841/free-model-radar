@@ -3067,6 +3067,127 @@ svg {
   transform: none;
 }
 
+.coding-kit {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.coding-kit-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color .18s, border-color .18s, background .18s;
+}
+
+.coding-kit-trigger:hover,
+.coding-kit-trigger.open {
+  border-color: var(--cyan);
+  background: rgba(95, 184, 206, .09);
+  color: var(--cyan);
+}
+
+.coding-kit-trigger.copied {
+  border-color: color-mix(in oklch, var(--green) 55%, transparent);
+  color: var(--green);
+}
+
+.coding-kit-copy-icon {
+  display: inline-flex;
+}
+
+.coding-kit-caret {
+  display: inline-block;
+  margin-left: 2px;
+  font-size: 13px;
+  line-height: 1;
+  transform: rotate(180deg);
+  transition: transform .18s ease;
+}
+
+.coding-kit-trigger.open .coding-kit-caret {
+  transform: rotate(0deg);
+}
+
+.coding-kit-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: min(360px, calc(100vw - 28px));
+  padding: 14px;
+  border: 1px solid var(--line-light);
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--panel) 96%, #081018);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, .28);
+  animation: fade-in .16s ease-out;
+}
+
+.coding-kit-menu-label {
+  margin-bottom: 8px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.coding-kit-model {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  border-left: 2px solid var(--cyan);
+  background: rgba(95, 184, 206, .08);
+}
+
+.coding-kit-model-provider {
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.coding-kit-model strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coding-kit-command {
+  display: block;
+  margin-top: 10px;
+  padding: 9px 10px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0C141C;
+  color: #C7D6DE;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.coding-kit-help {
+  margin-top: 8px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .export-btn:disabled {
   opacity: .45;
   cursor: default;
@@ -4079,6 +4200,20 @@ svg {
   .export-select {
     min-width: 0;
     flex: 1;
+  }
+
+  .coding-kit,
+  .coding-kit-trigger {
+    width: 100%;
+  }
+
+  .coding-kit-trigger {
+    justify-content: center;
+  }
+
+  .coding-kit-menu {
+    left: 0;
+    right: auto;
   }
 }
 
