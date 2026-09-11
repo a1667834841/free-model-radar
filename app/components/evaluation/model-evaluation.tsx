@@ -465,18 +465,6 @@ export default function ModelEvaluation({
       ),
     }),
     columnHelper.display({
-      id: 'status',
-      header: t('table.col.status'),
-      cell: ({ row }) => {
-        const model = row.original
-        return (
-          <span className={`m-status ${model.freeStatus}`}>
-            {t(`cost.${model.cost?.type ?? 'unknown'}`)}
-          </span>
-        )
-      },
-    }),
-    columnHelper.display({
       id: 'expand',
       header: '',
       cell: () => (
@@ -523,8 +511,6 @@ export default function ModelEvaluation({
     const sampleJson = {
       model: model.id,
       provider: model.providerName,
-      freeStatus: model.freeStatus,
-      cost: model.cost ?? null,
       ttftMs: model.ttftMs ?? model.latencyMs,
       latencyMs: model.latencyMs,
       tokensPerSec: model.tokensPerSec,
@@ -787,7 +773,6 @@ export default function ModelEvaluation({
             {renderSortHeader('tps')}
             {renderSortHeader('e2e', 'mh-right hide-sm')}
             {renderSortHeader('score', 'mh-right hide-sm')}
-            <span className="mh-center">{t('table.col.status')}</span>
             <span />
           </div>
 

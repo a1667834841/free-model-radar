@@ -1713,7 +1713,7 @@ details summary { cursor: pointer; }
   --font-body: Inter, ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", SFMono-Regular, Menlo, monospace;
   --container: 1280px;
-  --model-cols: 44px minmax(168px, 1.6fr) minmax(96px, .8fr) minmax(120px, 1.3fr) 76px 72px 76px 62px 56px 20px;
+  --model-cols: 44px minmax(168px, 1.6fr) minmax(96px, .8fr) minmax(120px, 1.3fr) 76px 72px 76px 62px 20px;
   --prov-cols: 210px 1fr 262px;
   --trend-cols: minmax(170px, 1.5fr) minmax(100px, .8fr) repeat(5, minmax(76px, .6fr));
   --fs-h1: clamp(28px, 4vw, 38px);
@@ -3910,7 +3910,7 @@ svg {
 
 @media (max-width: 1050px) {
   :root {
-    --model-cols: 34px 1fr 100px 1fr 68px 64px 60px 56px 64px 18px;
+    --model-cols: 34px 1fr 100px 1fr 68px 64px 60px 56px 18px;
   }
 
   .kpis {
@@ -4090,13 +4090,11 @@ svg {
 
 @media (max-width: 480px) {
   :root {
-    --model-cols: 24px 1fr 60px 62px 14px;
+    --model-cols: 24px 1fr 60px 14px;
   }
 
   .model-head span:nth-child(5),
-  .model-head span:nth-child(9),
-  .model-row .m-num:first-of-type,
-  .model-row .m-status {
+  .model-row .m-num:first-of-type {
     display: none;
   }
 }
