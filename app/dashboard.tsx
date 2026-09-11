@@ -17,7 +17,6 @@ import {
   getEvaluationMethod,
   resolveStreamingMetrics,
 } from '@/domain/evaluation'
-import { getModelCapability } from './model-capabilities'
 import type { RefreshStatus } from '@/domain/refresh'
 
 type FlattenedModel = ModelResult & { providerId: string; providerName: string }
@@ -88,15 +87,17 @@ const MCP_AGENT_PROMPT = `请作为我的 Coding Agent，帮我安装并配置�
 
 目标：让我可以在当前 Agent 中读取最新的免费模型测评，并推荐适合 Coding 的前五个模型。
 
+公开 MCP 地址（无需 Token，任何人可访问）：
+https://fm.ggball.top/api/mcp
+
 请按以下顺序执行：
 1. 检查当前 Agent（Codex / Claude Code / OpenCode）的 MCP 配置格式和配置文件位置。
-2. 从 https://github.com/a1667834841/free-model-radar 查找真实存在、可运行的 MCP server 或官方接入方式。
-3. 安装前先确认包名、版本、启动命令和权限范围；不要猜测不存在的 npm 包、命令或 URL。
-4. 将 MCP 配置写入当前 Agent 的用户级配置，并保留已有配置。
-5. 启动后调用一次工具，读取 https://fm.ggball.top/api/results 验证连通性。
-6. 最后返回 MCP 名称、配置文件、验证结果和当前最适合 Coding 的前五个模型。
+2. 将上面的公开地址配置为远程 Streamable HTTP MCP Server，不要再安装不存在的 npm 包。
+3. 将 MCP 配置写入当前 Agent 的用户级配置，并保留已有配置。
+4. 启动后调用一次 get_radar_results 验证连通性。
+5. 最后返回 MCP 名称、配置文件、验证结果和当前最适合 Coding 的前五个模型。
 
-如果仓库没有提供可用 MCP server，请明确说明原因，不要伪造安装成功；改为给出最小的替代方案。`
+如果当前 Agent 不支持远程 MCP，请说明配置限制，并给出对应的本地代理替代方案。`
 
 function CopyIcon() {
   return (
@@ -112,13 +113,6 @@ function RawDataCopyMenu({ models }: { models: FlattenedModel[] }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState<'skills' | 'json' | 'mcp' | null>(null)
   const rankedModels = useMemo(() => getEvaluationMethod(DEFAULT_EVALUATION_METHOD_ID).rank(models), [models])
-  const codingModel = useMemo(() => {
-    const codingName = /code|coder|coding|deepseek|qwen|claude|gpt|gemini|glm|kimi|mimo|minimax|nemotron|llama/i
-    return rankedModels.find((model) => {
-      const capability = getModelCapability(model)
-      return !capability.isEmbedding && !capability.canGenerateImage && codingName.test(model.id)
-    }) ?? rankedModels.find((model) => !getModelCapability(model).isEmbedding) ?? rankedModels[0] ?? null
-  }, [rankedModels])
   const rankingJson = useMemo(() => JSON.stringify({
     meta: { title: t('table.title'), sample: false },
     models: rankedModels.map((model, index) => ({
@@ -132,11 +126,8 @@ function RawDataCopyMenu({ models }: { models: FlattenedModel[] }) {
   }, null, 2), [rankedModels, t])
 
   const copy = useCallback(async (kind: 'skills' | 'json' | 'mcp') => {
-    const recommendation = codingModel
-      ? `# 当前 Coding 推荐：${codingModel.providerName} / ${codingModel.id}`
-      : '# 当前暂无可推荐 Coding 模型'
     const text = kind === 'skills'
-      ? `${CODING_SKILL_INSTALL_COMMAND}\n${recommendation}`
+      ? CODING_SKILL_INSTALL_COMMAND
       : kind === 'mcp' ? MCP_AGENT_PROMPT : rankingJson
     try {
       await navigator.clipboard.writeText(text)
@@ -146,7 +137,7 @@ function RawDataCopyMenu({ models }: { models: FlattenedModel[] }) {
     } catch {
       setCopied(null)
     }
-  }, [codingModel, rankingJson])
+  }, [rankingJson])
 
   return (
     <div className="raw-copy-menu">
