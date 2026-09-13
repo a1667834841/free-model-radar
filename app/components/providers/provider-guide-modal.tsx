@@ -23,6 +23,7 @@ const KEY_PATHS: Record<string, string> = {
   groq: 'API Keys',
   amd: 'Radeon Cloud → API Keys',
   flatkey: 'Console → API Keys',
+  cavoti: 'API Keys',
 }
 
 type LocalizedCopy = Record<Locale, string>
@@ -224,7 +225,7 @@ const PROVIDER_GUIDES: Record<string, ProviderGuideContent> = {
     keyDetail: copy('创建 API Key 后，Base URL 使用官方 /v1 端点。', 'Create an API key and use the official /v1 endpoint as the Base URL.'),
     highlights: [
       copy('当前 /models 返回 8 个 MiniMax 模型，模型列表较小，使用回退全量探测。', 'The current /models response returns 8 MiniMax models, so fallback probing covers the full small catalog.'),
-      copy('MiniMax-M3 已通过真实流式 chat 调用验证可返回 pong。', 'MiniMax-M3 was verified with a real streaming chat call returning pong.'),
+      copy('MiniMax-M3 已通过真实流式生成调用验证。', 'MiniMax-M3 was verified with a real streaming generation call.'),
     ],
     images: [],
     sharedKey: MINIMAX_DEMO_KEY ? {
@@ -240,6 +241,17 @@ const PROVIDER_GUIDES: Record<string, ProviderGuideContent> = {
     highlights: [
       copy('官网首页显示 Free 可获得 150M tokens；免费试用套餐注册后提供 50,000 tokens。', 'The homepage advertises a 150M-token free offer; the Free Trial plan provides 50,000 tokens after signup.'),
       copy('当前 /models 返回 61 个模型，其中 7 个带 is_free 标记，并已通过真实流式 chat 调用验证。', 'The current /models response returns 61 models, including 7 with is_free, verified via real streaming chat calls.'),
+    ],
+    images: [],
+  },
+  cavoti: {
+    registerUrl: 'https://cavoti.com/register?aff=TSS5LGL2JMNG',
+    registerDetail: copy('通过邀请链接进入 Cavoti 注册账号。', 'Register an account on Cavoti using the invite link.'),
+    keyDetail: copy('登录后进入 API Keys 页面创建 Key，Base URL 使用 https://cavoti.com/v1。', 'Create an API key in the API Keys section; use https://cavoti.com/v1 as the Base URL.'),
+    highlights: [
+      copy('宣传注册送 Pro 会员额度，多厂商模型统一聚合接入。', 'Promotional Pro membership quota with unified multi-provider model aggregation.'),
+      copy('实测 deepseek-v4-flash-0731、glm-5.3-flash、minimax-m3、qwen3.8-flash 4 个模型可直接正常调用返回 200。', 'Verified via real calls that 4 models (deepseek-v4-flash-0731, glm-5.3-flash, minimax-m3, qwen3.8-flash) respond with HTTP 200 directly.'),
+      copy('其余 70+ 个模型因当前账户无正余额返回 HTTP 402（insufficient_marketplace_balance），需正余额激活。', 'The remaining 70+ models return HTTP 402 (insufficient_marketplace_balance) due to zero balance, requiring positive balance to activate.'),
     ],
     images: [],
   },

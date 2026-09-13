@@ -193,4 +193,32 @@ describe('model filtering', () => {
     expect(selected.map((model) => model.id)).toEqual(['deepseek-v4-flash'])
   })
 
+  it('selects Cavoti target candidate models by freeKeywords and limits to maxModels', () => {
+    const cavotiProvider: ProviderConfig = {
+      ...provider,
+      id: 'cavoti',
+      freeKeywords: [
+        'deepseek-v4-flash-0731',
+        'glm-5.3-flash',
+        'minimax-m3',
+        'qwen3.8-flash',
+      ],
+      probe: { ...provider.probe, maxModels: 4 },
+    }
+    const selected = selectModelsForProbe(cavotiProvider, [
+      { id: 'claude-opus-5' },
+      { id: 'deepseek-v4-flash-0731' },
+      { id: 'glm-5.3-flash' },
+      { id: 'gpt-6-astra' },
+      { id: 'qwen3.8-flash' },
+      { id: 'minimax-m3' },
+    ])
+
+    expect(selected.map((model) => model.id)).toEqual([
+      'deepseek-v4-flash-0731',
+      'glm-5.3-flash',
+      'minimax-m3',
+      'qwen3.8-flash',
+    ])
+  })
 })

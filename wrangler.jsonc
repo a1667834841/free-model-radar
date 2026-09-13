@@ -17,11 +17,24 @@
       "remote": true
     }
   ],
+  "d1_databases": [
+    {
+      "binding": "RADAR_DB",
+      "database_name": "free-model-radar",
+      // 部署前用 `wrangler d1 create free-model-radar` 的返回值替换此占位 ID。
+      "database_id": "14266221-9f14-43d5-bd20-3cfea6c1c4e3",
+      "migrations_dir": "migrations"
+    }
+  ],
   "queues": {
     "producers": [
       {
         "binding": "REFRESH_QUEUE",
         "queue": "refresh-queue"
+      },
+      {
+        "binding": "SVG_EVALUATION_QUEUE",
+        "queue": "svg-evaluation-queue"
       }
     ],
     "consumers": [
@@ -30,12 +43,20 @@
         "max_batch_size": 1,
         "max_batch_timeout": 60,
         "max_retries": 3
+      },
+      {
+        "queue": "svg-evaluation-queue",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "max_concurrency": 2
       }
     ]
   },
   "triggers": {
     "crons": [
-      "*/30 * * * *"
+      "*/30 * * * *",
+      "7 * * * *"
     ]
   },
   "observability": {

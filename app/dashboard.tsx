@@ -8,6 +8,7 @@ import { getProviderIconUrl } from '@/lib/provider-icon'
 import RefreshButton from './refresh-button'
 import ModelEvaluation from './components/evaluation/model-evaluation'
 import TrendAnalysis from './components/trends/trend-analysis'
+import SvgEvaluationGallery from './components/svg-evaluation/svg-evaluation-gallery'
 import ProviderGuideModal from './components/providers/provider-guide-modal'
 import type { ProviderResult, ModelResult } from '@/domain/result'
 import type { TrendResponse } from '@/domain/trend'
@@ -33,6 +34,7 @@ type DashboardProps = {
 }
 
 const PROVIDER_COLORS = ['#F0A35E', '#5FB8CE', '#A78BFA', '#E879A8', '#7FBF6A', '#D8C07A', '#62B8A0', '#E59A8C']
+const COLLAPSED_PROVIDER_COUNT = 3
 
 type ProviderFact = {
   freeTier: MessageKey
@@ -63,6 +65,7 @@ const PROVIDER_FACTS: Record<string, ProviderFact> = {
   orcarouter: { freeTier: 'overview.tier.orcarouter', modelsLabel: '4 detected', signup: 'overview.signup.email' },
   minimax: { freeTier: 'overview.tier.minimax', modelsLabel: '8 models', signup: 'overview.signup.email', featured: true },
   'kira-ai': { freeTier: 'overview.tier.kira-ai', modelsLabel: '7 detected', signup: 'overview.signup.gmail', featured: true },
+  cavoti: { freeTier: 'overview.tier.cavoti', modelsLabel: '4 models', signup: 'overview.signup.email', featured: true },
 }
 
 function getProviderFact(provider: ProviderResult, t: ReturnType<typeof useI18n>['t']) {
@@ -229,8 +232,9 @@ function getDataHealth(refreshStatus: RefreshStatus, isStale: boolean): {
 
 export default function Dashboard({ providers, models, updatedAt, isStale, refreshStatus, trends, isAdmin, nodeGeo }: DashboardProps) {
   const { t, locale, setLocale } = useI18n()
-  const [pageView, setPageView] = useState<'overview' | 'trends'>('overview')
+  const [pageView, setPageView] = useState<'overview' | 'trends' | 'effects'>('overview')
   const [modelView, setModelView] = useState<'ranking' | 'provider'>('ranking')
+  const [providerOverviewExpanded, setProviderOverviewExpanded] = useState(false)
   const [guideProvider, setGuideProvider] = useState<ProviderResult | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const [trendData, setTrendData] = useState<TrendResponse | null>(trends)
@@ -243,11 +247,11 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
     setHydrated(true)
     try {
       const saved = localStorage.getItem('model-eval-view')
-      if (saved === 'overview' || saved === 'trends') setPageView(saved)
+      if (saved === 'overview' || saved === 'trends' || saved === 'effects') setPageView(saved)
     } catch { /* localStorage 不可用时忽略 */ }
   }, [])
 
-  function switchPageView(view: 'overview' | 'trends') {
+  function switchPageView(view: 'overview' | 'trends' | 'effects') {
     setPageView(view)
     try { localStorage.setItem('model-eval-view', view) } catch { /* ignore */ }
   }
@@ -340,6 +344,10 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
   const providerHealthPct = providers.length > 0 ? (healthyProviders / providers.length) * 100 : 0
   const relativeUpdatedAt = hydrated && updatedAt ? formatRelative(updatedAt, locale) : '—'
   const closeGuide = useCallback(() => setGuideProvider(null), [])
+  const visibleProviderOverview = providerOverviewExpanded
+    ? providerOverview
+    : providerOverview.slice(0, COLLAPSED_PROVIDER_COUNT)
+  const hiddenProviderCount = Math.max(0, providerOverview.length - COLLAPSED_PROVIDER_COUNT)
 
   return (
     <div className="dashboard">
@@ -496,6 +504,16 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
         >
           {t('page.tab.trends')}
         </button>
+        <button
+          type="button"
+          role="tab"
+          data-view="effects"
+          className={`tab ${pageView === 'effects' ? 'active' : ''}`}
+          onClick={() => switchPageView('effects')}
+          aria-selected={pageView === 'effects'}
+        >
+          {t('page.tab.effects')}
+        </button>
       </div>
 
       <div className={`view ${pageView === 'overview' ? 'active' : ''}`}>
@@ -507,7 +525,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
               <i className="help-dot" data-tip={t('overview.sub')}>?</i>
             </div>
           </div>
-          <div className="overview-table" role="table" aria-label={t('overview.title')}>
+          <div id="provider-overview-table" className="overview-table" role="table" aria-label={t('overview.title')}>
             <div className="overview-table-head" role="row">
               <span role="columnheader">{t('table.col.provider')}</span>
               <span role="columnheader">{t('overview.col.freeTier')}</span>
@@ -515,7 +533,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
               <span role="columnheader">{t('overview.col.signup')}</span>
               <span role="columnheader">{t('guide.title')}</span>
             </div>
-            {providerOverview.map((p, idx) => {
+            {visibleProviderOverview.map((p, idx) => {
               const color = providerColors[p.id]
               const faviconUrl = getProviderIconUrl(p)
               return (
@@ -552,6 +570,24 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
               )
             })}
           </div>
+          {hiddenProviderCount > 0 && (
+            <button
+              type="button"
+              className={`overview-toggle${providerOverviewExpanded ? ' expanded' : ''}`}
+              onClick={() => setProviderOverviewExpanded((expanded) => !expanded)}
+              aria-expanded={providerOverviewExpanded}
+              aria-controls="provider-overview-table"
+            >
+              <span>
+                {providerOverviewExpanded
+                  ? t('overview.collapse', { count: COLLAPSED_PROVIDER_COUNT })
+                  : t('overview.expand', { count: hiddenProviderCount })}
+              </span>
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
         </section>
       )}
 
@@ -595,6 +631,10 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
             </div>
           </section>
         )}
+      </div>
+
+      <div className={`view effects-view ${pageView === 'effects' ? 'active' : ''}`}>
+        <SvgEvaluationGallery active={pageView === 'effects'} />
       </div>
 
       <ProviderGuideModal provider={guideProvider} onClose={closeGuide} />

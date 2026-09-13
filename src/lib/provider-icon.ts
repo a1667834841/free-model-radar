@@ -28,6 +28,7 @@ const PROVIDER_ICON_DOMAINS: Record<string, string> = {
   orcarouter: 'www.orcarouter.ai',
   minimax: 'www.minimax.io/favicon.ico',
   'kira-ai': 'kiraai.vn/images/logo.png',
+  cavoti: 'cavoti.com',
 }
 
 export const AIHUBMIX_REGISTER_URL = 'https://aihubmix.com/?aff=FqPM'
@@ -62,6 +63,7 @@ const PROVIDER_HOME_URLS: Record<string, string> = {
   orcarouter: 'https://www.orcarouter.ai/',
   minimax: 'https://www.minimax.io/',
   'kira-ai': 'https://kiraai.vn/?ref=ggball0227',
+  cavoti: 'https://cavoti.com/register?aff=TSS5LGL2JMNG',
 }
 
 export function normalizeProviderKey(value: string): string {

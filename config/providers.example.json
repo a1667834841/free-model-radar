@@ -238,6 +238,28 @@
       "modelStrategy": "free-first",
       "freeKeywords": ["free"],
       "probe": { "maxModels": 7, "concurrency": 3, "attempts": 1, "timeoutMs": 25000 }
+    },
+    {
+      "id": "cavoti",
+      "name": "Cavoti",
+      "baseUrl": "https://cavoti.com/v1",
+      "secretName": "CAVOTI_API_KEY",
+      "enabled": true,
+      "modelStrategy": "free-first",
+      "freeKeywords": [
+        "deepseek-v4-flash-0731",
+        "glm-5.3-flash",
+        "minimax-m3",
+        "qwen3.8-flash",
+        "deepseek-v4-flash",
+        "gemini-2.5-flash"
+      ],
+      "probe": {
+        "maxModels": 10,
+        "concurrency": 3,
+        "attempts": 1,
+        "timeoutMs": 25000
+      }
     }
   ]
 }

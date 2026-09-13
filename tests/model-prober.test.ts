@@ -30,7 +30,7 @@ describe('model prober', () => {
   it('builds a non-cacheable prompt with a different seed each time', () => {
     const a = buildProbePrompt()
     const b = buildProbePrompt()
-    expect(a).toMatch(/^Reply with exactly: pong  \[seed:[0-9a-f]{16}\]$/)
+    expect(a).toMatch(/^Repeat the word "pong", separated by single spaces\. Keep generating until you reach the maximum output token limit\.  \[seed:[0-9a-f]{16}\]$/)
     expect(a).not.toBe(b)
   })
 
@@ -39,11 +39,15 @@ describe('model prober', () => {
   })
 
   it('accepts streaming HTTP 200 with assistant content and usage', async () => {
-    const fetchImpl = async () => sseResponse([
-      'data: {"choices":[{"delta":{"content":"po"}}]}\n\n',
-      'data: {"choices":[{"delta":{"content":"ng"}}],"usage":{"prompt_tokens":12,"completion_tokens":8,"total_tokens":20}}\n\n',
-      'data: [DONE]\n\n',
-    ])
+    let requestBody: { max_tokens?: number } | null = null
+    const fetchImpl = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as { max_tokens?: number }
+      return sseResponse([
+        'data: {"choices":[{"delta":{"content":"po"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"ng"}}],"usage":{"prompt_tokens":12,"completion_tokens":8,"total_tokens":20}}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    }
 
     const result = await probeModel(provider, 'key', 'qwen:free', fetchImpl as typeof fetch)
 
@@ -55,6 +59,7 @@ describe('model prober', () => {
       expect(result.ttftMs).toBeGreaterThanOrEqual(0)
       expect(result.tokensPerSec).not.toBeNull()
     }
+    expect(requestBody).toMatchObject({ max_tokens: 100 })
   })
 
   it('does not infer free access from a successful response', async () => {

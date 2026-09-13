@@ -30,6 +30,7 @@
 | **Token Harbor** | 无需签到；免费额度按滚动 7 天周期、按价值计量；无注册赠金，无需信用卡。[FAQ](https://tokenharbor.ai/faq) | [官网](https://tokenharbor.ai) |
 | **MiniMax** | 官方 OpenAI-compatible API 返回 8 个模型，`/models` 未提供结构化免费信号；因模型数 ≤20，使用回退全量探测。`MiniMax-M3` 已通过真实流式 chat 调用验证，返回 HTTP 200 且包含 `pong`。 | [官网](https://www.minimax.io/) |
 | **Kira AI** | OpenAI-compatible API，端点为 `/api/v1`；`/models` 返回 61 个模型，其中 7 个带 `is_free` 标记（如 `mimo-v2.5-free`、`hy3-free`、`glm-5.3-flash-free`）。官网首页显示 Free 可获得 150M tokens，免费试用套餐说明注册后提供 50,000 tokens；合作方模型可能需要充值 VND 钱包。多个免费模型已通过真实流式 chat 调用验证，返回 HTTP 200 且包含 `pong`。 | [注册](https://kiraai.vn/?ref=ggball0227) |
+| **Cavoti** | OpenAI-compatible API 网关，`/models` 返回 84 个模型；实测当前账号下 **`deepseek-v4-flash-0731`、`glm-5.3-flash`、`minimax-m3`、`qwen3.8-flash`** 共 4 个模型已通过真实流式 chat 调用验证，返回 HTTP 200 且包含 `pong`；其余 70+ 个模型因无正余额返回 HTTP 402（`insufficient_marketplace_balance`）。 | [注册](https://cavoti.com/register?aff=TSS5LGL2JMNG) |
 
 > 免费模型、额度和账户要求可能随时变化。
 
@@ -150,6 +151,24 @@ curl -H "Authorization: Bearer $MONITOR_TOKEN" https://你的域名/api/monitor
 }
 ```
 
+## SVG 效果测评存储与队列
+
+“模型效果”页面使用 D1 保存 SVG 测评任务与成功作品，并通过独立 Queue 分批生成。首次部署前需要创建数据库和队列：
+
+```bash
+npx wrangler d1 create free-model-radar
+npx wrangler queues create refresh-queue
+npx wrangler queues create svg-evaluation-queue
+```
+
+将创建数据库后返回的真实 `database_id` 写入 `wrangler.jsonc`，然后执行远程迁移：
+
+```bash
+npx wrangler d1 migrations apply free-model-radar --remote
+```
+
+SVG 测评 Cron 每小时第 7 分钟触发，每轮最多入队 10 个模型、每家厂商最多 2 个；公开页面只展示通过安全清洗且成功生成的 SVG。部署前必须将 `wrangler.jsonc` 中的 D1 占位 ID 替换掉。
+
 ## 开发命令
 
 ```bash
@@ -178,7 +197,7 @@ npm run deploy
 
 ## 趋势数据存储
 
-趋势数据继续使用 Cloudflare KV，不引入 D1。刷新任务完成后会按天追加原始采样：
+趋势数据继续使用 Cloudflare KV；新增的 D1 仅用于 SVG 效果测评，不承载趋势数据。刷新任务完成后会按天追加原始采样：
 
 ```text
 trend:YYYY-MM-DD

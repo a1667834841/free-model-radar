@@ -27,7 +27,8 @@ export type ProbeFailure = {
 
 export type ProbeResult = ProbeSuccess | ProbeFailure
 
-const PROBE_PROMPT = 'Reply with exactly: pong'
+const PROBE_PROMPT = 'Repeat the word "pong", separated by single spaces. Keep generating until you reach the maximum output token limit.'
+const PROBE_COMPLETION_TOKENS = 100
 const MAX_PROBE_TIMEOUT_MS = 25_000
 
 /**
@@ -200,7 +201,7 @@ async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: stri
       const response = await fetchImpl(`${provider.baseUrl.replace(/\/$/, '')}/accounts/${provider.accountId}/ai/run/${encodeURI(modelId)}`, {
         method: 'POST',
         headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: probePrompt }], max_tokens: 256 }),
+        body: JSON.stringify({ messages: [{ role: 'user', content: probePrompt }], max_tokens: PROBE_COMPLETION_TOKENS }),
         signal,
       })
       if (response.status !== 200) {
@@ -222,7 +223,7 @@ async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: stri
         model: modelId,
         messages: [{ role: 'user', content: probePrompt }],
         temperature: 0,
-        max_tokens: 256,
+        max_tokens: PROBE_COMPLETION_TOKENS,
         stream: true,
         stream_options: { include_usage: true },
       }),
