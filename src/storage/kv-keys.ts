@@ -7,5 +7,4 @@ export const KV_KEYS = {
   refreshRuntimeState: 'refresh-runtime-state',
   refreshJob: 'refresh-job',
   refreshMonitorState: 'refresh-monitor-state',
-  trendPrefix: 'trend:',
 } as const

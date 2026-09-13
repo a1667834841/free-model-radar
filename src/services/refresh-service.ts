@@ -150,9 +150,11 @@ export async function runRefresh(env: RadarEnv, refreshId: string, fetchImpl: ty
       }
       await putLatestResults(env.RADAR_KV, snapshot)
       if (hasProbeWork) {
-        const existingTrends = await getTrendResponse(env.RADAR_KV)
-        const missingTrendSamples = createMissingTrendSamples(existingTrends.modelStats, currentTrendSamples, snapshot.updatedAt)
-        await appendTrendSamples(env.RADAR_KV, [...currentTrendSamples, ...missingTrendSamples])
+        if (env.RADAR_DB) {
+          const existingTrends = await getTrendResponse(env.RADAR_KV, undefined, env.RADAR_DB)
+          const missingTrendSamples = createMissingTrendSamples(existingTrends.modelStats, currentTrendSamples, snapshot.updatedAt)
+          await appendTrendSamples(env.RADAR_DB, [...currentTrendSamples, ...missingTrendSamples])
+        }
       }
     }
 

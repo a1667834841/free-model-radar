@@ -598,7 +598,7 @@ describe('mock provider refresh', () => {
     expect(runtimeState.modelHealthState['provider-a:free-model'].requestFailureCount).toBe(1)
   })
 
-  it('skips missing trend writes when a refresh has no probe work', async () => {
+  it('skips trend persistence when no D1 binding is configured', async () => {
     const kv = new MemoryKV()
     await kv.put('providers-config', JSON.stringify({
       version: 1,
@@ -630,10 +630,6 @@ describe('mock provider refresh', () => {
     await runRefresh(env, 'refresh-missing-model', fetchImpl as typeof fetch)
 
     const trendEntry = Array.from(kv.store.entries()).find(([key]) => key.startsWith('trend:'))
-    expect(trendEntry).toBeDefined()
-    const bucket = JSON.parse(trendEntry?.[1] ?? '{"samples":[]}')
-    expect(bucket.samples).toEqual([
-      expect.objectContaining({ modelId: 'free-model', status: 'ok' }),
-    ])
+    expect(trendEntry).toBeUndefined()
   })
 })

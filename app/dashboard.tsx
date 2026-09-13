@@ -459,7 +459,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
             <div className="kpi-who">{fastestTtftModel ? `${fastestTtftModel.id}${fastestModel ? ` · ${fastestModel.providerName}` : ''}` : '—'}</div>
           </div>
           <div className="meter">
-            <span className="meter-track"><span className="meter-fill accent" style={{ width: `${fastestMeterPct}%` }} /></span>
+            <span className="meter-track"><span className="meter-fill accent" style={{ '--meter-ratio': Math.max(0, Math.min(100, fastestMeterPct)) / 100 } as CSSProperties} /></span>
             <span className="meter-note">{t('metric.fastestTtft')} · {models.length} {t('metric.models')}</span>
           </div>
         </article>
@@ -670,7 +670,7 @@ function MetricCard({ label, value, pad = 0, unit, detail, meter, meterPct, tone
         <div className="kpi-detail">{detail}</div>
       </div>
       <div className="meter">
-        <span className="meter-track"><span className="meter-fill" style={{ width: `${Math.max(0, Math.min(100, meterPct))}%`, background: `var(--${tone})` }} /></span>
+        <span className="meter-track"><span className="meter-fill" style={{ '--meter-ratio': Math.max(0, Math.min(100, meterPct)) / 100, background: `var(--${tone})` } as CSSProperties} /></span>
         <span className="meter-note">{meter}</span>
       </div>
     </article>

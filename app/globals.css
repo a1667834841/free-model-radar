@@ -2309,7 +2309,12 @@ svg {
 .meter-fill {
   display: block;
   height: 100%;
+  width: 100%;
   border-radius: 999px;
+  transform: scaleX(var(--meter-ratio, 0));
+  transform-origin: left center;
+  transition: transform .72s var(--ease-out);
+  animation: meter-fill-in .72s var(--ease-out) both;
 }
 
 .meter-fill.accent {
@@ -3737,7 +3742,8 @@ svg {
   border-radius: 4px;
   transform: scaleX(var(--ratio, 0));
   transform-origin: left;
-  transition: transform .5s var(--ease-out);
+  transition: transform .65s var(--ease-out);
+  animation: meter-fill-in .65s var(--ease-out) both;
 }
 
 .m-num {
@@ -4578,10 +4584,13 @@ svg {
 .accum-meter .bar i {
   display: block;
   height: 100%;
-  width: 50%;
+  width: 100%;
   background: var(--accent);
   border-radius: 4px;
-  animation: grow-bar 1s var(--ease-out) both;
+  transform: scaleX(var(--meter-ratio, 0));
+  transform-origin: left center;
+  transition: transform .72s var(--ease-out);
+  animation: meter-fill-in .72s var(--ease-out) both;
 }
 
 .accum-meter em {
@@ -4592,9 +4601,9 @@ svg {
   white-space: nowrap;
 }
 
-@keyframes grow-bar {
-  from { width: 0; }
-  to { width: 50%; }
+@keyframes meter-fill-in {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(var(--meter-ratio, var(--ratio, 0))); }
 }
 
 .trend-summary {

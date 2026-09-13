@@ -9,7 +9,6 @@ import type { ModelTrendStats, TrendMetricKey, TrendResponse, TrendSample } from
 import {
   collectHoverRowsAtTime,
   formatTrendModelName,
-  selectPreferredTrendModelsForLiveRanking,
   selectTrendModelsForLiveRanking,
 } from '@/domain/trend-view'
 import type { LiveRankedModelRef } from '@/domain/trend-view'
@@ -128,7 +127,7 @@ export default function TrendAnalysis({ trends, liveModels }: TrendAnalysisProps
     [trends.modelStats, liveModels],
   )
   const chartModels = useMemo(
-    () => selectPreferredTrendModelsForLiveRanking(trends.modelStats, liveModels, CHART_SERIES_LIMIT),
+    () => selectTrendModelsForLiveRanking(trends.modelStats, liveModels, CHART_SERIES_LIMIT),
     [trends.modelStats, liveModels],
   )
 
@@ -265,7 +264,9 @@ function AccumMeter({ days }: { days: number }) {
   const pct = Math.max(0, Math.min(100, (days / 2) * 100))
   return (
     <div className="accum-meter">
-      <div className="bar"><i style={{ width: `${pct}%` }} /></div>
+      <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+        <i style={{ '--meter-ratio': pct / 100 } as CSSProperties} />
+      </div>
       <em>{t('trend.accum.days', { count: days })}</em>
     </div>
   )

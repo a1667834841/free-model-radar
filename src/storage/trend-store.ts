@@ -1,13 +1,19 @@
-import { createTrendResponse, limitSamplesPerDayPerModel, type DailyTrendBucket, type TrendResponse, type TrendSample } from '@/domain/trend'
-import { KV_KEYS } from './kv-keys'
+import { createTrendResponse, type TrendResponse, type TrendSample } from '@/domain/trend'
 import { getLatestResults } from './results-store'
 
 const TREND_RANGE_DAYS = 7
-const TREND_BUCKET_TTL_SECONDS = 10 * 24 * 60 * 60
-const TREND_SAMPLES_PER_MODEL_PER_DAY_LIMIT = 24
+const TREND_RETENTION_DAYS = 10
+const TREND_DISPLAY_MODEL_LIMIT = 10
 
-function dateKey(date: string): string {
-  return `${KV_KEYS.trendPrefix}${date}`
+type TrendSampleRow = {
+  provider_id: string
+  provider_name: string
+  model_id: string
+  checked_at: string
+  status: TrendSample['status']
+  ttft_ms: number | null
+  tokens_per_sec: number | null
+  latency_ms: number | null
 }
 
 function isoDateFromMs(ms: number): string {
@@ -28,49 +34,75 @@ export function recentTrendDates(rangeDays = TREND_RANGE_DAYS, now = new Date())
   return Array.from({ length: rangeDays }, (_, index) => addDays(today, index - rangeDays + 1))
 }
 
-export async function getTrendBucket(kv: KVNamespace, date: string): Promise<DailyTrendBucket | null> {
-  const value = await kv.get(dateKey(date))
-  return value ? JSON.parse(value) as DailyTrendBucket : null
+function toTrendSample(row: TrendSampleRow): TrendSample {
+  return {
+    providerId: row.provider_id,
+    providerName: row.provider_name,
+    modelId: row.model_id,
+    checkedAt: row.checked_at,
+    status: row.status,
+    ttftMs: row.ttft_ms,
+    tokensPerSec: row.tokens_per_sec,
+    latencyMs: row.latency_ms,
+  }
 }
 
-export async function appendTrendSamples(kv: KVNamespace, samples: TrendSample[]): Promise<void> {
+async function appendTrendSamplesToD1(db: D1Database, samples: TrendSample[]): Promise<void> {
   if (samples.length === 0) return
-
-  const latest = await getLatestResults(kv)
-  const activeModelKeys = new Set<string>()
-  for (const provider of latest?.providers ?? []) {
-    for (const model of provider.models) {
-      activeModelKeys.add(`${provider.id}:${model.id}`)
-    }
-  }
+  const createdAt = new Date().toISOString()
   for (const sample of samples) {
-    activeModelKeys.add(`${sample.providerId}:${sample.modelId}`)
+    await db.prepare(`
+      INSERT INTO trend_samples (
+        provider_id, provider_name, model_id, checked_at, status,
+        ttft_ms, tokens_per_sec, latency_ms, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(provider_id, model_id, checked_at) DO UPDATE SET
+        provider_name = excluded.provider_name,
+        status = excluded.status,
+        ttft_ms = excluded.ttft_ms,
+        tokens_per_sec = excluded.tokens_per_sec,
+        latency_ms = excluded.latency_ms
+    `).bind(
+      sample.providerId,
+      sample.providerName,
+      sample.modelId,
+      sample.checkedAt,
+      sample.status,
+      sample.ttftMs,
+      sample.tokensPerSec,
+      sample.latencyMs,
+      createdAt,
+    ).run()
   }
 
-  const grouped = new Map<string, TrendSample[]>()
-  for (const sample of samples) {
-    const date = trendDateFromIso(sample.checkedAt)
-    grouped.set(date, [...(grouped.get(date) ?? []), sample])
-  }
-
-  for (const [date, dateSamples] of grouped) {
-    const existing = await getTrendBucket(kv, date)
-    const mergedSamples = [...(existing?.samples ?? []), ...dateSamples]
-      .filter((sample) => activeModelKeys.has(`${sample.providerId}:${sample.modelId}`))
-    const bucket: DailyTrendBucket = {
-      version: 1,
-      date,
-      samples: limitSamplesPerDayPerModel(mergedSamples, TREND_SAMPLES_PER_MODEL_PER_DAY_LIMIT),
-    }
-    await kv.put(dateKey(date), JSON.stringify(bucket), { expirationTtl: TREND_BUCKET_TTL_SECONDS })
-    await kv.delete(dateKey(addDays(date, -8)))
-  }
+  const cutoff = new Date(Date.now() - TREND_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  await db.prepare('DELETE FROM trend_samples WHERE checked_at < ?').bind(cutoff).run()
 }
 
-export async function getTrendResponse(kv: KVNamespace, rangeDays = TREND_RANGE_DAYS): Promise<TrendResponse> {
+async function getTrendSamplesFromD1(db: D1Database, rangeDays: number): Promise<TrendSample[]> {
   const dates = recentTrendDates(rangeDays)
-  const buckets = await Promise.all(dates.map((date) => getTrendBucket(kv, date)))
-  const samples = buckets.flatMap((bucket) => bucket?.samples ?? [])
+  const firstDate = dates[0]
+  const lastDate = dates[dates.length - 1]
+  if (!firstDate || !lastDate) return []
+  const from = `${firstDate}T00:00:00.000Z`
+  const to = `${addDays(lastDate, 1)}T00:00:00.000Z`
+  const result = await db.prepare(`
+    SELECT provider_id, provider_name, model_id, checked_at, status,
+      ttft_ms, tokens_per_sec, latency_ms
+    FROM trend_samples
+    WHERE checked_at >= ? AND checked_at < ?
+    ORDER BY checked_at ASC, id ASC
+  `).bind(from, to).all<TrendSampleRow>()
+  return result.results.map(toTrendSample)
+}
+
+export async function appendTrendSamples(db: D1Database, samples: TrendSample[]): Promise<void> {
+  if (samples.length === 0) return
+  await appendTrendSamplesToD1(db, samples)
+}
+
+export async function getTrendResponse(kv: KVNamespace, rangeDays = TREND_RANGE_DAYS, db: D1Database): Promise<TrendResponse> {
+  const samples = await getTrendSamplesFromD1(db, rangeDays)
 
   // 只保留当前仍出现在 latest-results 里的活跃模型样本，剔除已消失模型，避免趋势 payload 膨胀。
   const latest = await getLatestResults(kv)
@@ -81,5 +113,21 @@ export async function getTrendResponse(kv: KVNamespace, rangeDays = TREND_RANGE_
     }
   }
 
-  return createTrendResponse(samples, rangeDays, new Date().toISOString(), activeModelKeys)
+  const response = createTrendResponse(samples, rangeDays, new Date().toISOString(), activeModelKeys)
+  const displayModels = response.modelStats.slice(0, TREND_DISPLAY_MODEL_LIMIT)
+  const displayKeys = new Set(displayModels.map((model) => `${model.providerId}:${model.modelId}`))
+
+  // D1 keeps every raw sample, while the public chart payload only contains
+  // the models and points needed by the display table and its ten curves.
+  return {
+    ...response,
+    samples: response.samples.filter((sample) => displayKeys.has(`${sample.providerId}:${sample.modelId}`)),
+    modelStats: displayModels,
+    providers: response.providers
+      .map((provider) => ({
+        ...provider,
+        models: provider.models.filter((model) => displayKeys.has(`${model.providerId}:${model.modelId}`)),
+      }))
+      .filter((provider) => provider.models.length > 0),
+  }
 }

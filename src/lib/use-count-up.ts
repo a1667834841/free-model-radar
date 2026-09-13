@@ -20,21 +20,27 @@ export function useCountUp(target: number, pad = 0): string {
   useEffect(() => {
     const finalDisplay = formatCount(target, pad)
 
-    // 初始 hydration 后保持服务端终值，避免刷新时从 0 闪烁，也避免文本 hydration 不稳定。
+    // 首帧仍然使用服务端终值，避免 hydration mismatch；挂载后再从 0 播放一次，
+    // 让首屏 KPI 真正有 count-up 动效。reduced-motion 用户直接落到终值。
     if (!mountedRef.current) {
       mountedRef.current = true
       previousTargetRef.current = target
-      setDisplay(finalDisplay)
-      return
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        setDisplay(finalDisplay)
+        return
+      }
+      setDisplay(formatCount(0, pad))
     }
 
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    if (mountedRef.current && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
       previousTargetRef.current = target
       setDisplay(finalDisplay)
       return
     }
 
-    const from = previousTargetRef.current
+    const from = mountedRef.current && previousTargetRef.current === target
+      ? 0
+      : previousTargetRef.current
     previousTargetRef.current = target
     let raf = 0
     let start: number | null = null
