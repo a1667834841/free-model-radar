@@ -39,12 +39,12 @@ describe('model prober', () => {
   })
 
   it('accepts streaming HTTP 200 with assistant content and usage', async () => {
-    let requestBody: { max_tokens?: number } | null = null
+    let requestBody: { max_tokens?: number; enable_thinking?: boolean } | null = null
     const fetchImpl = async (_input: RequestInfo | URL, init?: RequestInit) => {
-      requestBody = JSON.parse(String(init?.body)) as { max_tokens?: number }
+      requestBody = JSON.parse(String(init?.body)) as { max_tokens?: number; enable_thinking?: boolean }
       return sseResponse([
-        'data: {"choices":[{"delta":{"content":"po"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":"ng"}}],"usage":{"prompt_tokens":12,"completion_tokens":8,"total_tokens":20}}\n\n',
+        'data: {"choices":[{"delta":{"content":"<thi"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"nk>pong</think>"}}],"usage":{"prompt_tokens":12,"completion_tokens":8,"total_tokens":20}}\n\n',
         'data: [DONE]\n\n',
       ])
     }
@@ -53,13 +53,42 @@ describe('model prober', () => {
 
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.content).toBe('pong')
+      expect(result.content).toBe('<think>pong</think>')
       expect(result.freeStatus).toBe('available')
       expect(result.tokenUsage.totalTokens).toBe(20)
       expect(result.ttftMs).toBeGreaterThanOrEqual(0)
       expect(result.tokensPerSec).not.toBeNull()
+      expect(result.thinkingModeEnabled).toBe(true)
+      expect(result.thinkTagDetected).toBe(true)
     }
-    expect(requestBody).toMatchObject({ max_tokens: 100 })
+    expect(requestBody).toMatchObject({ max_tokens: 100, enable_thinking: true })
+  })
+
+  it('falls back to a normal probe when enable_thinking is rejected', async () => {
+    const requestBodies: Array<{ enable_thinking?: boolean }> = []
+    const fetchImpl = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { enable_thinking?: boolean }
+      requestBodies.push(body)
+      if (body.enable_thinking) return new Response('unsupported parameter', { status: 400 })
+      return sseResponse([
+        'data: {"choices":[{"delta":{"content":"pong"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    }
+
+    const result = await probeModel(provider, 'key', 'model-a', fetchImpl as typeof fetch)
+
+    expect(requestBodies.map((body) => body.enable_thinking)).toEqual([true, undefined])
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.thinkingModeEnabled).toBe(false)
+      expect(result.thinkTagDetected).toBe(false)
+    }
+  })
+
+  it('only treats an actual think tag as thinking evidence', () => {
+    expect(modelProberInternals.containsThinkTag('<think>reasoning</think>answer')).toBe(true)
+    expect(modelProberInternals.containsThinkTag('Here is my thinking process')).toBe(false)
   })
 
   it('does not infer free access from a successful response', async () => {

@@ -1,177 +1,48 @@
-# Free Model Radar
+<p align="center">
+  <img src="public/fm-logo.svg" width="88" alt="Free Model Radar Logo">
+</p>
 
-A model availability and latency radar running on Cloudflare Workers.
+<h1 align="center">Free Model Radar</h1>
 
-[简体中文](README.zh-CN.md)
+<p align="center">
+  持续实测免费大模型，并将可用模型统一为 OpenAI 兼容网关。
+</p>
 
-![Free Model Radar home page](docs/screenshot.png)
+<p align="center">
+  <a href="https://fm.ggball.top"><strong>在线体验</strong></a>
+  ·
+  <a href="docs/deployment.md"><strong>部署文档</strong></a>
+</p>
 
-## Provider comparison
+<p align="center">
+  <img src="https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers">
+  <img src="https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white" alt="Next.js 15">
+  <img src="https://img.shields.io/badge/API-OpenAI_兼容-10A37F?logo=openai&logoColor=white" alt="OpenAI 兼容 API">
+</p>
 
+<p align="center">
+  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/a1667834841/free-model-radar">
+    <img src="https://deploy.workers.cloudflare.com/button" alt="一键部署到 Cloudflare">
+  </a>
+</p>
 
-![Live provider status](https://fm.ggball.top/api/provider-status.svg)
+## 特点
 
-| Provider | Usage mechanism | Link |
-|----------|-----------------|------|
-| **Groq Cloud** | No check-in. The free plan uses RPM, RPD, TPM, and TPD limits rather than a fixed monthly grant. [Rate limits](https://console.groq.com/docs/rate-limits) | [Console](https://console.groq.com) |
-| **OpenRouter** | No check-in. Free models generally allow 50 requests/day; purchasing at least $10 in credits increases the limit to about 1,000/day. [FAQ](https://openrouter.ai/docs/faq) | [Website](https://openrouter.ai) |
-| **RNTM** | No check-in; pay-as-you-go. New workspaces may include $5 free credit, while a separate starter offer states that its credit expires after 7 days. [Quickstart](https://rntm.sh/docs/quickstart) · [Starter offer](https://rntm.sh/offer) | [Website](https://rntm.sh) |
-| **NVIDIA NIM** | No check-in. Free Endpoints are rate-limited; no single public daily/monthly quota was found. [Model catalog](https://build.nvidia.com/models) | [Model catalog](https://build.nvidia.com/models) |
-| **B.AI** | No check-in. The official documentation currently describes some models as free, with usage accounted for by tokens/credits. [Pricing and usage](https://docs.b.ai/zh-Hans/llmservice/pricing-and-usage/) | [Register](https://chat.b.ai/chat?invite_code=ATZT6T) |
-| **GMI Cloud** | No check-in. Some models are marked free in the catalog, but no fixed public daily/monthly quota was found. [Billing](https://docs.gmicloud.ai/inference-engine/billing/price) | [Console](https://console.gmicloud.ai) |
-| **SenseNova** | No public unified check-in or monthly quota rule found; verify the current account policy on the platform. | [Website](https://www.sensenova.cn) |
-| **ZenMux** | No check-in. The Free plan provides about 5 flows/5 hours for Studio Chat only and no API; API access starts with Starter. [Subscription](https://zenmux.ai/docs/guide/subscription.html) | [Register](https://zenmux.ai/invite/DZSANY) |
-| **JustWoker** | Public third-party information describes registration credit plus daily check-in credit; exact amounts should be verified on the site. [Third-party reference](https://github.com/panxunying/ai-coding-welfare) | [Register](https://api.justwoker.icu/register?aff=BHmu) |
-| **GoRouter** | Third-party information describes a daily check-in, but the amount is unconfirmed. [Third-party reference](https://github.com/panxunying/ai-coding-welfare) | [Register](https://gorouter.app/sign-up?aff=4q8W) |
-| **AIHubMix** | No check-in. Free models are documented as requiring no card and having no trial expiry, with per-model RPM and daily token caps reset daily. [Free models](https://docs.aihubmix.com/en/blogs/free-ai-models) | [Website](https://aihubmix.com/?aff=FqPM) |
-| **AMD Radeon Cloud** | Requires an AMD developer account and API key. The current catalog reports `free: false` with positive prices; verify the account's current access policy before treating the target model as free. | [Radeon Cloud](https://developer.amd.com.cn/radeon) |
-| **Flatkey** | 控制台将 `deepseek-v4-flash` 标记为免费；当前仅探测该模型。 | [注册](https://console.flatkey.ai/sign-up?aff=EZkj) |
-| **Bynara** | No check-in. The free tier uses per-minute request limits and a daily token quota, normally reset daily in UTC. [Docs](https://router.bynara.id/docs) | [Website](https://router.bynara.id) |
-| **OpenCode ZEN** | No check-in. Free models are time-limited; sign-in and billing details are required, while other models are pay-per-request. [ZEN docs](https://dev.opencode.ai/docs/zen/) | [Website](https://opencode.ai) |
-| **Token Harbor** | No check-in. Free usage is a value-based allowance in a rolling 7-day period; there is no welcome credit and no card is required. [FAQ](https://tokenharbor.ai/faq) | [Website](https://tokenharbor.ai) |
-| **Experiential Labs** | OpenAI-compatible gateway with 696 discovered models and 14 `-free` model IDs. Promotional FREE models from the platform were also verified with real chat calls: `qwen3.8-27b`, `deepseek-v4-flash`, `gpt-5.6-luna`, and `gpt-6-astra` returned `usage.cost: 0.0`; `claude-fable-5.1` responded but reported non-zero cost, so it is not selected as free. | [Platform](https://platform.experientiallabs.ai/) |
-| **OrcaRouter** | Zero-markup OpenAI-compatible router with 194 models. Sign up free, no credit card required. Free tier is sourced from provider-level free tiers (e.g. GLM 5.3 Flash, DeepSeek V4 Flash, Tencent Hy3). 4 free model IDs matched by `-free` keyword (`orcarouter/free`, `deepseek/deepseek-v4-flash-free`, `tencent/hy3-free`, `z-ai/glm-5.3-flash-free`) — all verified via real chat calls returning 200. Free routes may change as providers update their quotas. | [Website](https://www.orcarouter.ai/) |
-| **MiniMax** | Official OpenAI-compatible API with 8 discovered models and no structured free signal in `/models`; the small catalog is handled by fallback probing. `MiniMax-M3` was verified with a real streaming chat call returning HTTP 200 and `pong`. | [Website](https://www.minimax.io/) |
-| **Kira AI** | OpenAI-compatible API at `/api/v1` with 61 discovered models and 7 `is_free` models (`mimo-v2.5-free`, `hy3-free`, `glm-5.3-flash-free`, etc.). Homepage advertises a 150M-token free offer, while the Free Trial plan lists 50,000 tokens after signup; partner models may require VND wallet top-up. Multiple free models were verified via real streaming chat calls returning HTTP 200 and `pong`. | [Register](https://kiraai.vn/?ref=ggball0227) |
-| **Cavoti** | OpenAI-compatible API gateway with 84 models returned by `/models`. 4 models (**`deepseek-v4-flash-0731`**, **`glm-5.3-flash`**, **`minimax-m3`**, **`qwen3.8-flash`**) were verified via real streaming chat calls returning HTTP 200 and `pong`; the remaining 70+ models return HTTP 402 (`insufficient_marketplace_balance`) without positive account balance. | [Register](https://cavoti.com/register?aff=TSS5LGL2JMNG) |
+| 功能 | 说明 |
+|------|------|
+| **真实测评** | 定时调用模型，验证可用性并实测首字延迟、生成速度和端到端延迟 |
+| **效果评估** | 对比模型生成的 SVG 作品，展示上下文、多模态和思考模式等能力 |
+| **统一网关** | 提供 OpenAI 兼容的 `/v1/*` 接口，支持指定厂商或使用 `model: "auto"` 自动选择最快模型 |
+| **趋势分析** | 汇总近 7 天性能和成功率，观察模型速度与稳定性变化 |
+| **Agent 配置** | 生成 Claude Code、Codex、OpenCode、Gemini CLI、Zed、Cursor 等工具的配置 |
+| **自动化运行** | 使用 Cloudflare Cron、Queue、KV 和 D1 完成探测、存储与异常告警 |
 
-> Free models, quotas, and account requirements may change at any time.
+![Free Model Radar 首页截图](docs/screenshot.png)
 
-## Local setup
+## 部署
 
-```bash
-npm install
-cp config/providers.example.json config/providers.local.json
-cp .env.example .env.local
-```
+点击上方 **Deploy to Cloudflare** 按钮，或查看[完整部署与配置说明](docs/deployment.md)。
 
-Edit these files:
+[![实时厂商状态](https://fm.ggball.top/api/provider-status.zh-CN.svg)](https://fm.ggball.top)
 
-```text
-config/providers.local.json
-.env.local
-```
-
-## Provider configuration
-
-The real configuration file is not committed to Git:
-
-```text
-config/providers.local.json
-```
-
-Example:
-
-```json
-{
-  "version": 1,
-  "updatedAt": "2026-08-27T09:00:00.000Z",
-  "providers": [
-    {
-      "id": "provider-a",
-      "name": "Provider A",
-      "baseUrl": "https://api.example.com/v1",
-      "secretName": "PROVIDER_A_KEY",
-      "enabled": true,
-      "modelStrategy": "free-first",
-      "freeKeywords": ["free", ":free"],
-      "probe": {
-        "maxModels": 20,
-        "concurrency": 3,
-        "attempts": 1,
-        "timeoutMs": 25000
-      }
-    }
-  ]
-}
-```
-
-Validate the configuration:
-
-```bash
-npm run kv:validate
-```
-
-Push the configuration to KV:
-
-```bash
-npm run kv:push
-```
-
-Pull the configuration from KV:
-
-```bash
-npm run kv:pull
-```
-
-## Cloudflare Secrets
-
-```bash
-npx wrangler secret put REFRESH_ADMIN_TOKEN
-npx wrangler secret put PROVIDER_A_KEY
-```
-
-## KV
-
-Replace the real KV namespace ID in `wrangler.jsonc`:
-
-```jsonc
-{
-  "kv_namespaces": [
-    {
-      "binding": "RADAR_KV",
-      "id": "replace-with-kv-namespace-id"
-    }
-  ]
-}
-```
-
-## Development commands
-
-```bash
-npm run dev
-npm test
-npm run typecheck
-npm run build
-npm run preview
-npm run deploy
-```
-
-## Administrator access
-
-Open:
-
-```text
-/?admin_token=your-REFRESH_ADMIN_TOKEN
-```
-
-After successful verification, the application sets an `HttpOnly` cookie that is valid for 12 hours and redirects to `/`.
-
-## TODO
-
-- [x] **Trend charts**: Add throughput, time-to-first-token (TTFT), and end-to-end latency trends for each model in a seven-day window. Trends appear after two days of data have accumulated.
-- [x] **Agent config export**: Add an Agent Config page that exports model configuration snippets for major Agents. The page supports copying only, not downloading. It can copy the current free model IDs and the format for Claude Code, Codex, OpenCode, Gemini CLI, Zed, and Cursor. See [`docs/agent-config-formats.md`](docs/agent-config-formats.md) for the templates.
-
-## Trend data storage
-
-Trend data continues to use Cloudflare KV; D1 is not introduced. After a refresh completes, raw samples are appended to a daily bucket:
-
-```text
-trend:YYYY-MM-DD
-```
-
-Each sample contains `providerId`, `providerName`, `modelId`, `checkedAt`, `status`, `ttftMs`, `tokensPerSec`, and `latencyMs`. Failed, unavailable, or missing records retain their `status` and use `null` metric values so the system can calculate success rates and show gaps or failures in trend charts.
-
-The frontend reads the most recent seven daily buckets, then the server aggregates averages, medians, P95, and success rates. Trend charts appear once at least two sampled dates exist. Only raw data is stored in KV; derived statistics are calculated rather than persisted.
-
-## Notes
-
-This project uses the OpenNext Cloudflare adapter:
-
-```bash
-npm run build
-npm run preview
-npm run deploy
-```
-
-The Cron business entry point is `src/worker.ts`, whose `scheduled()` handler calls the same `runRefresh()` flow. Before deployment, verify that the Worker generated by OpenNext includes the `scheduled()` handler. If it does not, use a separate Cron Worker bound to the same KV namespace and Secrets to run `src/worker.ts`. A real Cloudflare deployment smoke test has not yet been performed.
+> 免费模型、额度和账户要求可能随时变化；页面展示的是实际探测结果，不代表厂商的长期服务承诺。

@@ -16,6 +16,10 @@ export type ModelResult = {
   ttftMs?: number | null
   /** Completion throughput (tokens / second) after first token */
   tokensPerSec?: number | null
+  /** 本次探测是否显式传入 enable_thinking=true。 */
+  thinkingModeEnabled?: boolean
+  /** 开启思考模式后，响应正文是否出现 <think> 标签。 */
+  thinkTagDetected?: boolean
   availability: 'available'
   freeStatus: FreeStatus
   cost?: ModelCost

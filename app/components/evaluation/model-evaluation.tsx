@@ -24,7 +24,7 @@ import { getProviderIconUrl } from '@/lib/provider-icon'
 import { getScoreTierVar } from '@/lib/score-tier'
 import { useI18n } from '../../i18n'
 import AgentConfigExport from '../export/agent-config-export'
-import { getModelCapability } from '../../model-capabilities'
+import { getModelCapability } from '@/domain/model-capabilities'
 
 type ModelEvaluationProps = {
   models: FlattenedModel[]

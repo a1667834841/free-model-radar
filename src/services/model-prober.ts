@@ -11,6 +11,8 @@ export type ProbeSuccess = {
   latencyMs: number
   ttftMs: number
   tokensPerSec: number | null
+  thinkingModeEnabled: boolean
+  thinkTagDetected: boolean
   freeStatus: 'free' | 'available'
   prompt: string
   content: string | null
@@ -67,6 +69,10 @@ export function findUnavailableContentPhrase(content: string): string | null {
     }
   }
   return null
+}
+
+export function containsThinkTag(content: string): boolean {
+  return /<think(?:\s[^>]*)?>/i.test(content)
 }
 
 function extractAssistantContent(payload: unknown): string | null {
@@ -192,7 +198,13 @@ async function readStreamingProbe(
   }
 }
 
-async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: string, fetchImpl: typeof fetch): Promise<ProbeSuccess> {
+async function probeOnce(
+  provider: ProviderConfig,
+  apiKey: string,
+  modelId: string,
+  fetchImpl: typeof fetch,
+  thinkingModeEnabled: boolean,
+): Promise<ProbeSuccess> {
   const startedAt = Date.now()
   const probePrompt = buildProbePrompt()
   const { content, ttftMs, latencyMs, tokenUsage } = await withTimeout(async (signal) => {
@@ -226,6 +238,7 @@ async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: stri
         max_tokens: PROBE_COMPLETION_TOKENS,
         stream: true,
         stream_options: { include_usage: true },
+        ...(thinkingModeEnabled ? { enable_thinking: true } : {}),
       }),
       signal,
     })
@@ -248,6 +261,7 @@ async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: stri
   }
 
   const tokensPerSec = computeTokensPerSec(latencyMs, ttftMs, tokenUsage.completionTokens, content)
+  const effectiveThinkingMode = provider.apiStyle !== 'cloudflare-workers-ai' && thinkingModeEnabled
 
   return {
     ok: true,
@@ -255,6 +269,8 @@ async function probeOnce(provider: ProviderConfig, apiKey: string, modelId: stri
     latencyMs,
     ttftMs,
     tokensPerSec,
+    thinkingModeEnabled: effectiveThinkingMode,
+    thinkTagDetected: effectiveThinkingMode && containsThinkTag(content),
     prompt: probePrompt,
     content,
     freeStatus: 'available',
@@ -267,9 +283,18 @@ export async function probeModel(provider: ProviderConfig, apiKey: string, model
   let lastError = 'Unknown probe error'
   for (let attempt = 0; attempt < provider.probe.attempts; attempt += 1) {
     try {
-      return await probeOnce(provider, apiKey, modelId, fetchImpl)
+      return await probeOnce(provider, apiKey, modelId, fetchImpl, true)
     } catch (error) {
       lastError = safeErrorMessage(error)
+      // 部分 OpenAI 兼容厂商会拒绝未知的 enable_thinking 参数。
+      // 回退探测只用于维持可用性数据，不能作为思考能力证据。
+      if (provider.apiStyle !== 'cloudflare-workers-ai' && /HTTP (400|422)\b/.test(lastError)) {
+        try {
+          return await probeOnce(provider, apiKey, modelId, fetchImpl, false)
+        } catch (fallbackError) {
+          lastError = safeErrorMessage(fallbackError)
+        }
+      }
       // 中转站常对同一 Provider 做突发请求限流；退避只针对 429，避免把瞬时限流记成永久失败。
       if (lastError.includes('HTTP 429') && attempt + 1 < provider.probe.attempts) {
         await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
@@ -293,4 +318,5 @@ export const modelProberInternals = {
   computeTokensPerSec,
   readStreamingProbe,
   findUnavailableContentPhrase,
+  containsThinkTag,
 }

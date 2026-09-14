@@ -27,7 +27,7 @@ curl -sS --fail --max-time 30 \
 - HTTP 非 200、JSON 无法解析或没有 `updatedAt` 时停止并说明无法取得最新数据。
 - `isStale: true` 时仍可分析，但必须在结果开头标注数据已过期。
 - 使用模型自己的 `checkedAt` 判断测评新鲜度，不要只看全局 `updatedAt`。
-- 优先使用 `app/model-capabilities.ts` 中按 Provider 和完整模型 ID 匹配的上下文与能力信息；没有能力信息的模型视为上下文未知，不进入 Coding 推荐。
+- 优先使用 `src/domain/model-capabilities.ts` 中按 Provider 和完整模型 ID 匹配的上下文与能力信息；没有能力信息的模型视为上下文未知，不进入 Coding 推荐。
 
 ## 硬性筛选
 

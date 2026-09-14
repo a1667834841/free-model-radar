@@ -127,3 +127,27 @@ export function getModelCapability(model: { id: string; providerName: string }):
   }
 }
 
+export function parseContextTokens(context: string): number | null {
+  const matches = [...context.toUpperCase().matchAll(/(\d+(?:\.\d+)?)\s*([KM])/g)]
+  if (matches.length === 0) return null
+  return Math.max(...matches.map((match) => {
+    const value = Number(match[1])
+    return match[2] === 'M' ? value * 1_000_000 : value * 1_000
+  }))
+}
+
+export function supportsAutoModelCapabilities(model: {
+  id: string
+  providerName: string
+  thinkingModeEnabled?: boolean
+  thinkTagDetected?: boolean
+}): boolean {
+  const capability = getModelCapability(model)
+  const contextTokens = parseContextTokens(capability.context)
+  return contextTokens != null
+    && contextTokens >= 1_000_000
+    && capability.isLlm
+    && capability.isInputMultimodal
+    && model.thinkingModeEnabled === true
+    && model.thinkTagDetected === true
+}

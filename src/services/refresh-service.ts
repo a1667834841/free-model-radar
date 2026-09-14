@@ -410,6 +410,8 @@ async function processNextBatch(
         latencyMs: probeResult.latencyMs,
         ttftMs: probeResult.ttftMs,
         tokensPerSec: probeResult.tokensPerSec,
+        thinkingModeEnabled: probeResult.thinkingModeEnabled,
+        thinkTagDetected: probeResult.thinkTagDetected,
         availability: 'available',
         freeStatus: isFreeCost(cost.type) ? 'free' : 'available',
         cost,

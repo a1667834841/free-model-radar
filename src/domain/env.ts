@@ -4,6 +4,7 @@ export type RadarEnv = {
   REFRESH_QUEUE?: Queue<import('./refresh').RefreshQueueMessage>
   SVG_EVALUATION_QUEUE?: Queue<import('./svg-evaluation').SvgEvaluationQueueMessage>
   REFRESH_ADMIN_TOKEN?: string
+  GATEWAY_API_KEY?: string
   [key: string]: unknown
 }
 
