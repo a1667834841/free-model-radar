@@ -74,12 +74,9 @@ details summary { cursor: pointer; }
   height: 34px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  background: var(--amber);
-  color: #0A1118;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: -.06em;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  background: transparent;
   box-shadow: 0 0 20px rgba(240, 163, 94, .25);
 }
 
@@ -1843,9 +1840,10 @@ svg {
   letter-spacing: 0;
 }
 
-.brand-mark svg {
-  width: 20px;
-  height: 20px;
+.brand-mark img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
 }
 
 .brand-tagline {

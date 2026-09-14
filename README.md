@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/fm-logo.svg" width="88" alt="Free Model Radar Logo">
+  <img src="public/free-model-radar-logo.png" width="88" alt="Free Model Radar Logo">
 </p>
 
 <h1 align="center">Free Model Radar</h1>

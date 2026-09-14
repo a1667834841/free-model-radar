@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import type { CSSProperties } from 'react'
 import { useI18n, type MessageKey } from './i18n'
@@ -354,12 +355,7 @@ export default function Dashboard({ providers, models, updatedAt, isStale, refre
       <header className="topbar">
         <div className="topbar-brand">
           <span className="brand-mark">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M3 6.5h4.3M3 12h4.3M3 17.5h4.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity=".48" />
-              <path d="M7.3 6.5 14.4 12M7.3 12h7.1M7.3 17.5 14.4 12" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
-              <path d="M14.4 12H19.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              <circle cx="21.2" cy="12" r="1.9" fill="currentColor" />
-            </svg>
+            <Image src="/free-model-radar-logo.png" width={34} height={34} alt="" priority />
           </span>
           <span className="brand-tagline"><span className="brand-lite">free</span><span className="brand-strong">router</span></span>
         </div>
